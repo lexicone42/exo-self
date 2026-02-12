@@ -1,0 +1,8 @@
+{
+  "name": "claude-exo-self",
+  "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
+  "author": {
+    "name": "Bryan",
+    "email": "local@localhost"
+  }
+}

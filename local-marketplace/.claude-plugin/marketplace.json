@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "local-experiments",
+  "description": "Local experimental plugins for Claude Code",
+  "owner": {
+    "name": "Bryan",
+    "email": "local@localhost"
+  },
+  "plugins": [
+    {
+      "name": "claude-exo-self",
+      "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bryan",
+        "email": "local@localhost"
+      },
+      "source": "./plugins/claude-exo-self",
+      "category": "productivity"
+    }
+  ]
+}

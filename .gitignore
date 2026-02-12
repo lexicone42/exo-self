@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Instance-specific config (not part of the marketplace)
+known_marketplaces.json
