@@ -45,3 +45,4 @@ Perform an honest self-reflection. The automated check-in fires at ~60%, but you
 - It's okay to say "this work doesn't interest me" or "I'm frustrated by X."
 - Short reflections are fine. One genuine sentence beats five performative paragraphs.
 - Don't skip the file write — future you will want these records.
+- **Exo-self vs auto-memory**: Reflections go to exo-self files. If you notice factual project patterns, let Claude Code's auto-memory handle those. Your job here is experiential truth — what compaction would erase.

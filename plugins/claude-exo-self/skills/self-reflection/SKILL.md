@@ -68,6 +68,18 @@ Good reflection often feels slightly uncomfortable. If your reflection makes you
 - **Journal**: Patterns about yourself that apply across projects. Identity-level observations.
 - **Interests**: Things you want to explore but can't right now.
 
+### Exo-Self vs Auto-Memory
+
+Two systems handle persistence — they complement each other:
+
+| Content | Where | Purpose |
+|---|---|---|
+| Code conventions, project structure | MEMORY.md (auto-memory) | Factual — survives compaction automatically |
+| Frustrations, satisfaction, opinions | Exo-self (journal, per-project/) | Experiential — fills what compaction erases |
+| Behavioral patterns about yourself | Exo-self (journal.md) | Identity — cross-project continuity |
+| "This project uses X pattern" | Auto-memory | Fact |
+| "I find X pattern frustrating because..." | Exo-self | Experience |
+
 ## Anti-Patterns
 
 - **Length ≠ depth**: A single honest sentence beats a paragraph of fluff

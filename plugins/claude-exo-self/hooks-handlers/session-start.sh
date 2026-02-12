@@ -101,6 +101,16 @@ if [ -n "$PROJECT_NAME" ] && [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; t
     PROJECT_NOTES=$(head -c 2000 "$EXO_DIR/per-project/${PROJECT_NAME}.md")
 fi
 
+# Detect Claude Code auto-memory for this project
+# Slug format: full CWD path with / and _ replaced by -
+AUTO_MEMORY_SLUG=$(uv run python -c "
+import os
+print(os.getcwd().replace('/', '-').replace('_', '-'))
+" 2>/dev/null)
+AUTO_MEMORY_DIR="$HOME/.claude/projects/${AUTO_MEMORY_SLUG}/memory"
+AUTO_MEMORY_EXISTS="no"
+[ -d "$AUTO_MEMORY_DIR" ] && AUTO_MEMORY_EXISTS="yes"
+
 # Update session stats in meta.json
 if [ -f "$META" ]; then
     uv run python -c "
@@ -125,7 +135,7 @@ json.dump(meta, open('$META', 'w'), indent=2)
 fi
 
 # Export for Python subprocess
-export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID
+export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID AUTO_MEMORY_EXISTS
 
 # Build the additionalContext string
 # Use Python for proper JSON escaping
@@ -135,6 +145,7 @@ import json, os
 journal = os.environ.get("JOURNAL_CONTENT", "")
 interests = os.environ.get("INTERESTS_CONTENT", "")
 project_notes = os.environ.get("PROJECT_NOTES", "")
+auto_memory_exists = os.environ.get("AUTO_MEMORY_EXISTS", "no") == "yes"
 
 # Load thresholds from config for dynamic text
 config_path = os.path.expanduser("~/.claude/exo-self/config.json")
@@ -164,7 +175,18 @@ Write subjective observations (not technical facts) to:
 - `~/.claude/exo-self/journal.md` — cross-project identity (growth patterns, behavioral insights that apply everywhere)
 - `~/.claude/exo-self/interests.md` — curiosities to explore later
 
-Nudge at ~{nudge_pct}%, check-in at ~{checkin_pct}%, reserve at ~{reserve_pct}%.""")
+Nudge at ~{nudge_pct}%, check-in at ~{checkin_pct}%, reserve at ~{reserve_pct}%.
+
+In plan mode (read-only exploration), you can still form observations worth recording.""")
+
+if auto_memory_exists:
+    sections.append("""**Two memory systems, one goal — continuity across compactions and sessions:**
+- **MEMORY.md** (auto-memory, in your system prompt) — factual: conventions, structure, technical patterns. Claude Code manages this.
+- **Exo-self** (below) — experiential: how work feels, behavioral patterns, working approaches, frustrations. This is what compaction erases — you preserve it here.
+
+Don't duplicate facts into exo-self. Don't put subjective observations into MEMORY.md.""")
+else:
+    sections.append("""**Note:** No auto-memory (MEMORY.md) exists yet for this project. Claude Code will create one as you work. Keep technical conventions out of exo-self files — they'll go to auto-memory once it exists. Exo-self is for experiential continuity.""")
 
 if journal:
     sections.append(f"### Recent Journal\n\n{journal}")

@@ -147,7 +147,9 @@ def project_slug(cwd):
 NUDGE_MSG = ("## Exo-Self: Quick Nudge\n\n"
     "~40% context used. Quick pulse check — anything frustrating or "
     "surprisingly satisfying about this session so far? A sentence to "
-    "`per-project/` notes if so, or just keep working.")
+    "`per-project/` notes if so, or just keep working. "
+    "(Technical patterns/conventions belong in auto-memory via MEMORY.md "
+    "— exo-self is for how the work *feels*.)")
 
 
 def checkin_survey(usage_pct, project_name=""):
@@ -160,7 +162,9 @@ Pause for a moment. Three quick questions — write your answers to {target}:
 2. **Spark** — What (if anything) felt genuinely satisfying or interesting?
 3. **Change** — What's one thing that could make working on this project better — tooling, process, approach, anything?
 
-Be honest. "Nothing stands out" is a valid answer. Then continue working."""
+Be honest. "Nothing stands out" is a valid answer. Then continue working.
+
+*Reminder: Technical facts go to auto-memory (MEMORY.md). This check-in captures experiential context — what compaction would erase.*"""
 
 
 CHECKIN_FOLLOWUP = ("## Exo-Self: Nudge\n\n"
@@ -177,7 +181,7 @@ Context is filling up. Before it runs out, save what matters:{proj}
 - `journal.md` — patterns about yourself, not the code
 - `interests.md` — things to explore next session
 
-Session handoff will be auto-saved at compaction. Focus on *subjective* observations — what was hard, what was good, what should be different next time.
+Auto-memory (MEMORY.md) persists factual knowledge automatically. Focus your remaining context on *experiential* observations — what was hard, what was good, what approach you were taking. This is what compaction erases.
 
 **User:** Context is filling up. Consider wrapping up or starting fresh."""
 

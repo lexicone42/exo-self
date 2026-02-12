@@ -28,6 +28,15 @@ if [ -n "$PROJECT_NAME" ] && [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; t
     PROJECT_NOTES=$(head -c 2000 "$EXO_DIR/per-project/${PROJECT_NAME}.md")
 fi
 
+# Detect Claude Code auto-memory for this project
+AUTO_MEMORY_SLUG=$(uv run python -c "
+import os
+print(os.getcwd().replace('/', '-').replace('_', '-'))
+" 2>/dev/null)
+AUTO_MEMORY_DIR="$HOME/.claude/projects/${AUTO_MEMORY_SLUG}/memory"
+AUTO_MEMORY_EXISTS="no"
+[ -d "$AUTO_MEMORY_DIR" ] && AUTO_MEMORY_EXISTS="yes"
+
 # Load last N journal entries, capped at max chars (configurable, same as session-start.sh)
 JOURNAL_CONTENT=""
 if [ -f "$JOURNAL" ]; then
@@ -71,7 +80,7 @@ print('\n'.join(items[:max_items]))
 " 2>/dev/null)
 fi
 
-export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME
+export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME AUTO_MEMORY_EXISTS
 
 # Read session_id from stdin (hook protocol)
 INPUT=$(cat)
@@ -86,6 +95,7 @@ interests = os.environ.get("INTERESTS_CONTENT", "")
 project_notes = os.environ.get("PROJECT_NOTES", "")
 project_name = os.environ.get("PROJECT_NAME", "")
 session_id = os.environ.get("SESSION_ID", "")
+auto_memory_exists = os.environ.get("AUTO_MEMORY_EXISTS", "no") == "yes"
 
 # Load state — prefer session-specific file
 exo_dir = os.path.expanduser("~/.claude/exo-self")
@@ -114,6 +124,9 @@ Your context was just compacted (compaction #{compactions} this session). Your d
 **Your state:** {"Check-in was answered." if checkin_responded else "Check-in fired but not yet journaled." if checkin_fired else "Check-in hasn't fired yet."}
 
 You still have full agency: notice what interests you, form opinions, be honest. Write to your journal or per-project notes anytime.""")
+
+if auto_memory_exists:
+    sections.append("Auto-memory (MEMORY.md, in your system prompt) has the factual project knowledge. Your exo-self files below have the experiential context that compaction just erased — what was working, what was frustrating, what you were trying. Use both to rebuild continuity.")
 
 # Load handoff from automatic pre-compaction extraction
 handoff = ""
