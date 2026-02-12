@@ -13,7 +13,7 @@ SESSIONS_DIR="$EXO_DIR/sessions"
 INPUT=$(cat)
 
 uv run python -c "
-import json, os, sys, time, datetime
+import json, os, sys, time, datetime, re
 
 input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
 
@@ -42,6 +42,44 @@ except Exception:
 session_start = state.get('session_start', 0)
 duration_min = round((time.time() - session_start) / 60) if session_start else 0
 
+# --- Belt-and-suspenders: detect checkin_responded if stop-check.sh missed it ---
+if state.get('checkin_fired') and not state.get('checkin_responded') and session_start > 0:
+    journal_path = os.path.join(exo_dir, 'journal.md')
+    project_slug = state.get('project_slug', '')
+    wrote_notes = False
+
+    # mtime-based detection
+    if os.path.exists(journal_path):
+        try:
+            wrote_notes = os.path.getmtime(journal_path) > session_start
+        except OSError:
+            pass
+
+    if not wrote_notes and project_slug:
+        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
+        if os.path.exists(proj_path):
+            try:
+                wrote_notes = os.path.getmtime(proj_path) > session_start
+            except OSError:
+                pass
+
+    # Content-based fallback
+    if not wrote_notes and project_slug:
+        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
+        if os.path.exists(proj_path):
+            try:
+                start_size = state.get('per_project_filesize', 0)
+                with open(proj_path) as f:
+                    f.seek(start_size)
+                    new_content = f.read()
+                if new_content and ('**Friction**' in new_content or '### Check-in' in new_content or '**Spark**' in new_content):
+                    wrote_notes = True
+            except Exception:
+                pass
+
+    if wrote_notes:
+        state['checkin_responded'] = True
+
 # Update meta
 try:
     meta = {}
@@ -52,6 +90,48 @@ try:
     meta['last_session_end'] = datetime.datetime.now().isoformat()
     meta['last_session_reason'] = reason
     meta['last_session_duration_min'] = duration_min
+
+    # --- Spark extraction from new per-project content ---
+    project_slug = state.get('project_slug', '')
+    if project_slug and session_start > 0:
+        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
+        if os.path.exists(proj_path):
+            try:
+                start_size = state.get('per_project_filesize', 0)
+                with open(proj_path) as f:
+                    f.seek(start_size)
+                    new_content = f.read()
+
+                if new_content:
+                    spark_pattern = r'\*\*Spark\*\*\s*[-\u2014]\s*(.+?)(?:\n|$)'
+                    sparks_found = re.findall(spark_pattern, new_content)
+
+                    if sparks_found:
+                        existing_sparks = meta.get('sparks', [])
+
+                        for spark_text in sparks_found:
+                            spark_text = spark_text.strip()
+                            if not spark_text:
+                                continue
+
+                            # Deduplicate by (text[:100].lower(), project)
+                            dedup_key = (spark_text[:100].lower(), project_slug)
+                            is_dup = any(
+                                (s.get('text', '')[:100].lower(), s.get('project', '')) == dedup_key
+                                for s in existing_sparks
+                            )
+                            if not is_dup:
+                                existing_sparks.append({
+                                    'text': spark_text,
+                                    'project': project_slug,
+                                    'timestamp': datetime.datetime.now().isoformat(),
+                                    'session_id': session_id or state.get('session_id', ''),
+                                })
+
+                        # Cap at 20 entries
+                        meta['sparks'] = existing_sparks[-20:]
+            except Exception:
+                pass
 
     # Track session history (keep last 10)
     history = meta.get('session_history', [])

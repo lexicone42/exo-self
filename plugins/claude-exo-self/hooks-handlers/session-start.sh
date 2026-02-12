@@ -119,6 +119,29 @@ if [ -n "$PROJECT_NAME" ] && [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; t
     PROJECT_NOTES=$(head -c 2000 "$EXO_DIR/per-project/${PROJECT_NAME}.md")
 fi
 
+# Record per-project file size in state (for spark extraction at session end)
+# Also store project_slug so stop-check.sh and session-end.sh can use it
+if [ -n "$PROJECT_NAME" ]; then
+    uv run python -c "
+import json, os
+state_path = '$STATE_PATH'
+proj_path = os.path.expanduser('$EXO_DIR/per-project/${PROJECT_NAME}.md')
+try:
+    with open(state_path) as f:
+        state = json.load(f)
+    state['project_slug'] = '$PROJECT_NAME'
+    state['per_project_filesize'] = os.path.getsize(proj_path) if os.path.exists(proj_path) else 0
+    with open(state_path, 'w') as f:
+        json.dump(state, f)
+    # Also update shared state for backward compat
+    shared = os.path.expanduser('$EXO_DIR/.context-monitor-state.json')
+    with open(shared, 'w') as f:
+        json.dump(state, f)
+except Exception:
+    pass
+" 2>/dev/null
+fi
+
 # Detect Claude Code auto-memory for this project
 # Slug format: full CWD path with / and _ replaced by -
 AUTO_MEMORY_SLUG=$(uv run python -c "
@@ -256,6 +279,38 @@ if journal:
 
 if interests:
     sections.append(f"### Interests\n\n{interests}")
+
+# Load and display recent sparks from meta.json
+try:
+    meta_path = os.path.expanduser("~/.claude/exo-self/meta.json")
+    with open(meta_path) as f:
+        meta_data = json.load(f)
+    sparks = meta_data.get("sparks", [])
+    if sparks:
+        max_sparks = 5
+        estimated_max = 800_000
+        try:
+            with open(config_path) as f:
+                scfg = json.load(f)
+            max_sparks = scfg.get("max_sparks_display", 5)
+            estimated_max = scfg.get("estimated_max_chars", estimated_max)
+        except Exception:
+            pass
+        # Scale with context window size
+        if estimated_max > 800_000 and max_sparks == 5:
+            scale = min(estimated_max / 800_000, 4.0)
+            max_sparks = max(5, int(5 * scale))
+        recent = sparks[-max_sparks:]
+        lines = []
+        for s in recent:
+            proj = s.get("project", "unknown")
+            text = s.get("text", "")
+            if len(text) > 150:
+                text = text[:147] + "..."
+            lines.append(f"- **{proj}**: {text}")
+        sections.append("### Recent Sparks\n\n" + "\n".join(lines))
+except Exception:
+    pass
 
 if project_notes:
     sections.append(f"### Project Notes ({project})\n\n{project_notes}")

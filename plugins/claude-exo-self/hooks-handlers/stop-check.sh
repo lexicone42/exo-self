@@ -25,11 +25,6 @@ import json, os, sys, datetime, time
 
 input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
 
-# If stop_hook_active is True, Claude is already continuing from a stop hook — don't block
-if input_data.get('stop_hook_active'):
-    print(json.dumps({}))
-    sys.exit(0)
-
 exo_dir = os.path.expanduser('$EXO_DIR')
 journal_path = os.path.expanduser('$JOURNAL')
 meta_path = os.path.expanduser('$META')
@@ -53,8 +48,56 @@ except Exception:
     pass
 
 session_start = state.get('session_start', 0)
+checkin_fired = state.get('checkin_fired', False)
+project_slug = state.get('project_slug', '')
 
-# Already reminded this session — don't loop
+# --- Bookkeeping BEFORE early-exit guards ---
+# Detect wrote_notes via mtime
+wrote_notes = False
+if os.path.exists(journal_path) and session_start > 0:
+    try:
+        wrote_notes = os.path.getmtime(journal_path) > session_start
+    except OSError:
+        pass
+
+proj_path = ''
+if not wrote_notes and session_start > 0 and project_slug:
+    proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
+    if os.path.exists(proj_path):
+        try:
+            wrote_notes = os.path.getmtime(proj_path) > session_start
+        except OSError:
+            pass
+
+# Content-based fallback: check for check-in markers in NEW content only
+if not wrote_notes and session_start > 0 and project_slug:
+    if not proj_path:
+        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
+    if os.path.exists(proj_path):
+        try:
+            start_size = state.get('per_project_filesize', 0)
+            with open(proj_path) as f:
+                f.seek(start_size)
+                new_content = f.read()
+            if new_content and ('**Friction**' in new_content or '### Check-in' in new_content or '**Spark**' in new_content):
+                wrote_notes = True
+        except Exception:
+            pass
+
+# Update checkin_responded BEFORE guards — this is the key fix
+if wrote_notes and checkin_fired and not state.get('checkin_responded'):
+    state['checkin_responded'] = True
+    try:
+        with open(state_path, 'w') as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+# --- Early-exit guards (prevent re-blocking, but bookkeeping is already done) ---
+if input_data.get('stop_hook_active'):
+    print(json.dumps({}))
+    sys.exit(0)
+
 if state.get('stop_reminded'):
     print(json.dumps({}))
     sys.exit(0)
@@ -64,25 +107,7 @@ duration_min = (time.time() - session_start) / 60 if session_start else 0
 failures = state.get('tool_failures', 0)
 failure_tools = state.get('failure_tools', {})
 task_completions = state.get('task_completions', 0)
-checkin_fired = state.get('checkin_fired', False)
 compactions = state.get('compactions', 0)
-project_slug = state.get('project_slug', '')
-
-# Check if notes were written this session (journal or per-project)
-wrote_notes = False
-if os.path.exists(journal_path) and session_start > 0:
-    try:
-        wrote_notes = os.path.getmtime(journal_path) > session_start
-    except OSError:
-        pass
-
-if not wrote_notes and session_start > 0 and project_slug:
-    proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-    if os.path.exists(proj_path):
-        try:
-            wrote_notes = os.path.getmtime(proj_path) > session_start
-        except OSError:
-            pass
 
 # Update meta with session end time
 try:
@@ -95,47 +120,35 @@ try:
 except Exception:
     pass
 
-# Mark checkin as responded if notes were written
-if wrote_notes and checkin_fired and not state.get('checkin_responded'):
-    state['checkin_responded'] = True
-
 # --- Decision logic ---
-# Don't block if: notes already written, or session too short to warrant reflection
 should_block = False
 reason = ''
 
 if wrote_notes:
     should_block = False
 elif duration_min < 2:
-    # Quick session — not worth interrupting
     should_block = False
 else:
     should_block = True
     state['stop_reminded'] = True
 
-    # Craft contextual reason based on what happened this session
     parts = ['Exo-self: Before ending, a moment for reflection.']
 
-    # Duration context
     if duration_min > 30:
         parts.append(f'This was a long session (~{int(duration_min)} min).')
     elif duration_min > 10:
         parts.append(f'Session ran ~{int(duration_min)} min.')
 
-    # Failure context
     if failures >= 3:
         top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else 'tools'
         parts.append(f'{failures} tool failures ({top_tool} most common) — what caused the friction?')
 
-    # Task completion context
     if task_completions >= 3:
         parts.append(f'{task_completions} tasks completed — anything surprising about how they went?')
 
-    # Compaction context
     if compactions > 0:
         parts.append(f'Context was compacted {compactions}x — experiential notes are especially valuable since earlier context is compressed.')
 
-    # General nudge
     target = f'per-project/{project_slug}.md' if project_slug else 'journal.md'
     parts.append(f'Even a sentence in ~/.claude/exo-self/{target} helps future-you. If genuinely nothing to note, acknowledge and stop.')
 

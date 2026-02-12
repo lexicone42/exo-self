@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0
+
+Fix checkin_responded detection, add spark tracking.
+
+### Fixed
+- **checkin_responded always false** — Bookkeeping (wrote_notes detection, checkin_responded update) now runs BEFORE early-exit guards (stop_hook_active, stop_reminded) in stop-check.sh. Previously, 17/17 check-in responses went unrecorded.
+- **Belt-and-suspenders detection** in session-end.sh — catches checkin_responded on exits where Stop hook never fires (terminal close, /clear)
+
+### New
+- **Spark tracking** — `**Spark** — text` entries in per-project notes are extracted at session end, deduplicated, stored in meta.json (cap: 20), and displayed as "Recent Sparks" section at session start
+- **per_project_filesize** — Session state now records per-project file size at session start, enabling byte-exact content diffing for spark extraction and content-based wrote_notes fallback
+- **project_slug in session state** — Set at session start (was only set by context-monitor.py), ensuring stop-check.sh and session-end.sh always have it
+
+### Config additions
+- `max_sparks_display` — Number of sparks to show at session start (default: 5, scales with context window)
+
 ## 0.4.0
 
 Cross-signal hooks, context-aware stop, Agent Teams readiness.
