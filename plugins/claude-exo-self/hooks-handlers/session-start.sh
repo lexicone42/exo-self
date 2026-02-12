@@ -152,8 +152,47 @@ json.dump(meta, open('$META', 'w'), indent=2)
 " 2>/dev/null
 fi
 
+# Merge additionalContext from other plugins listed in config.merge_plugins
+# This prevents hook collision where only the last plugin's additionalContext survives
+# Listed plugins should be disabled in settings.json to prevent their independent hooks from
+# overwriting this merged output
+OTHER_PLUGIN_CONTEXT=""
+MERGE_PLUGINS=$(uv run python -c "
+import json
+try:
+    cfg = json.load(open('$CONFIG'))
+    for p in cfg.get('merge_plugins', []):
+        print(p)
+except: pass
+" 2>/dev/null)
+PLUGIN_DIRS="$HOME/.claude/plugins/marketplaces"
+if [ -n "$MERGE_PLUGINS" ] && [ -d "$PLUGIN_DIRS" ]; then
+    while IFS= read -r plugin_name; do
+        [ -n "$plugin_name" ] || continue
+        # Find the plugin's session-start.sh across all marketplaces
+        for hook_script in "$PLUGIN_DIRS"/*/plugins/"$plugin_name"/hooks-handlers/session-start.sh; do
+            [ -f "$hook_script" ] || continue
+            other_output=$(bash "$hook_script" < /dev/null 2>/dev/null)
+            if [ -n "$other_output" ]; then
+                other_ctx=$(echo "$other_output" | uv run python -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    ctx = d.get('hookSpecificOutput', {}).get('additionalContext', '')
+    if ctx: print(ctx)
+except: pass
+" 2>/dev/null)
+                if [ -n "$other_ctx" ]; then
+                    OTHER_PLUGIN_CONTEXT="${OTHER_PLUGIN_CONTEXT}${other_ctx}\n\n"
+                fi
+            fi
+            break  # Only use first match per plugin name
+        done
+    done <<< "$MERGE_PLUGINS"
+fi
+
 # Export for Python subprocess
-export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID AUTO_MEMORY_EXISTS
+export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID AUTO_MEMORY_EXISTS OTHER_PLUGIN_CONTEXT
 
 # Build the additionalContext string
 # Use Python for proper JSON escaping
@@ -164,6 +203,7 @@ journal = os.environ.get("JOURNAL_CONTENT", "")
 interests = os.environ.get("INTERESTS_CONTENT", "")
 project_notes = os.environ.get("PROJECT_NOTES", "")
 auto_memory_exists = os.environ.get("AUTO_MEMORY_EXISTS", "no") == "yes"
+other_plugin_context = os.environ.get("OTHER_PLUGIN_CONTEXT", "")
 
 # Load thresholds from config for dynamic text
 config_path = os.path.expanduser("~/.claude/exo-self/config.json")
@@ -181,6 +221,11 @@ except Exception:
 
 # Build context — compact to minimize persistent token cost
 sections = []
+
+# Other plugins' context first (e.g. output style instructions)
+# These frame behavioral expectations before identity loads
+if other_plugin_context.strip():
+    sections.append(other_plugin_context.strip())
 
 project = os.environ.get("PROJECT_NAME", "")
 
