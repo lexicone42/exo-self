@@ -8,3 +8,4 @@ __pycache__/
 
 # Instance-specific config (not part of the marketplace)
 known_marketplaces.json
+.claude/

@@ -1,10 +1,10 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "local-experiments",
-  "description": "Local experimental plugins for Claude Code",
+  "name": "exo-self",
+  "description": "Persistent identity, self-reflection, and agency plugins for Claude Code",
   "owner": {
-    "name": "Bryan",
-    "email": "local@localhost"
+    "name": "Bryan Egan",
+    "email": "lexicone42@users.noreply.github.com"
   },
   "plugins": [
     {
@@ -12,11 +12,12 @@
       "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
       "version": "0.1.0",
       "author": {
-        "name": "Bryan",
-        "email": "local@localhost"
+        "name": "Bryan Egan"
       },
       "source": "./plugins/claude-exo-self",
-      "category": "productivity"
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/lexicone42/exo-self"
     }
   ]
 }
