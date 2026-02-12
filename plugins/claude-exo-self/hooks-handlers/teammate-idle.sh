@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # teammate-idle.sh — Inject exo-self identity into Agent Teams members
 # Called on TeammateIdle: fires when a teammate finishes its current work
 # and is ready for a new task assignment.

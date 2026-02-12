@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # post-compact-start.sh — Reload identity after context compaction
 # Called on SessionStart with source="compact"
 #

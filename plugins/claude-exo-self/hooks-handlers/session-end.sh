@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # session-end.sh — Reliable session cleanup
 # Called on SessionEnd: fires on ALL exits (terminal close, /clear, logout, etc.)
 # More reliable than Stop hook for bookkeeping since Stop only fires on normal stops.

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1
+
+Cross-platform fixes from fresh macOS install (GH issue #1).
+
+### Fixed
+- **PATH resolution** — All hook scripts now source `env.sh` which adds Homebrew, `.local/bin`, and `.cargo/bin` to PATH. Fixes silent `uv` failures on macOS where hooks run with minimal PATH.
+- **Python handler wrappers** — `context-monitor.py` and `failure-tracker.py` now invoked via shell wrappers that source `env.sh`, instead of bare `uv run python` in hooks.json.
+- **merge_plugins path** — Fixed plugin search path from `marketplaces/*/plugins/` (wrong) to `cache/*/<name>/*/` (correct). Plugins are installed in cache, not marketplaces.
+- **plugin.json version** — Now auto-synced from CHANGELOG.md by deploy.sh. Was stuck at 0.4.0.
+- **File permissions** — Python handlers now have execute bit set for consistency.
+- **Statusline PATH** — statusline.sh adds Homebrew paths so `jq` and `git` are found on macOS.
+
+### Improved
+- **deploy.sh** — Now installs statusline, configures settings.json statusLine entry, syncs plugin.json version. 7 steps total.
+- **Statusline bundled** — Two-line statusline with purple exo-self indicator now ships with the plugin.
+
 ## 0.5.0
 
 Fix checkin_responded detection, add spark tracking.

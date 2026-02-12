@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/context-monitor.py",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/context-monitor-wrapper.sh",
             "timeout": 5
           }
         ]
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/failure-tracker.py",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/failure-tracker-wrapper.sh",
             "timeout": 3
           }
         ]

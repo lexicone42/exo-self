@@ -5,6 +5,9 @@
 # Line 1: Exo-self indicator | Model | Repo:Branch | git status | lines changed
 # Line 2: Context bar | percentage | duration | cost
 
+# Ensure PATH includes common tool locations (hooks run with minimal PATH)
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
 # Read JSON from stdin
 input=$(cat)
 

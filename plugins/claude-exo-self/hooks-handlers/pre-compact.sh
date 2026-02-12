@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # pre-compact.sh — Automatically save session state before compaction
 #
 # Called on PreCompact. Does TWO things:

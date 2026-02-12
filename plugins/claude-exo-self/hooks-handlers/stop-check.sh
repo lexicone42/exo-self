@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # stop-check.sh — Context-aware nudge to write notes before session ends
 # Called on Stop: evaluates whether this session warrants reflection.
 #

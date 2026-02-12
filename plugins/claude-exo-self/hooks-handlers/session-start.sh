@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # session-start.sh — Load exo-self identity into Claude's awareness
 # Called on SessionStart: injects journal + agency instructions as additionalContext
 
@@ -188,12 +189,12 @@ try:
         print(p)
 except: pass
 " 2>/dev/null)
-PLUGIN_DIRS="$HOME/.claude/plugins/marketplaces"
-if [ -n "$MERGE_PLUGINS" ] && [ -d "$PLUGIN_DIRS" ]; then
+CACHE_DIR="$HOME/.claude/plugins/cache"
+if [ -n "$MERGE_PLUGINS" ] && [ -d "$CACHE_DIR" ]; then
     while IFS= read -r plugin_name; do
         [ -n "$plugin_name" ] || continue
-        # Find the plugin's session-start.sh across all marketplaces
-        for hook_script in "$PLUGIN_DIRS"/*/plugins/"$plugin_name"/hooks-handlers/session-start.sh; do
+        # Search plugin cache: cache/<marketplace>/<plugin-name>/<version>/hooks-handlers/
+        for hook_script in "$CACHE_DIR"/*/"$plugin_name"/*/hooks-handlers/session-start.sh; do
             [ -f "$hook_script" ] || continue
             other_output=$(bash "$hook_script" < /dev/null 2>/dev/null)
             if [ -n "$other_output" ]; then

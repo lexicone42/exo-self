@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # subagent-start.sh — Inject exo-self identity into subagents
 # Called on SubagentStart: gives spawned agents awareness of the exo-self system.
 #

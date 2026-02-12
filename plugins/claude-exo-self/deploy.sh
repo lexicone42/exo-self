@@ -75,8 +75,26 @@ if $CHECK_ONLY; then
     exit 0
 fi
 
-# --- 1. Sync plugin files to cache ---
-echo "1. Syncing plugin to cache..."
+# --- 1. Sync plugin.json version with CHANGELOG ---
+echo "1. Syncing plugin.json version..."
+PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
+if [ -f "$PLUGIN_JSON" ]; then
+    uv run python -c "
+import json
+with open('$PLUGIN_JSON') as f:
+    pj = json.load(f)
+if pj.get('version') != '$VERSION':
+    pj['version'] = '$VERSION'
+    with open('$PLUGIN_JSON', 'w') as f:
+        json.dump(pj, f, indent=2)
+    print('   -> plugin.json updated to $VERSION')
+else:
+    print('   -> plugin.json already at $VERSION')
+" 2>/dev/null
+fi
+
+# --- 2. Sync plugin files to cache ---
+echo "2. Syncing plugin to cache..."
 
 # Remove old version directories
 if [ -d "$CLAUDE_DIR/plugins/cache/local/$PLUGIN_NAME" ]; then
@@ -95,13 +113,13 @@ else
 fi
 echo "   -> $CACHE_DIR"
 
-# --- 2. Create runtime directories ---
-echo "2. Creating runtime directories..."
+# --- 3. Create runtime directories ---
+echo "3. Creating runtime directories..."
 mkdir -p "$EXO_DIR"/{reflections,per-project,sessions}
 
-# --- 3. Create default config if missing ---
+# --- 4. Create default config if missing ---
 if [ ! -f "$EXO_DIR/config.json" ]; then
-    echo "3. Creating default config..."
+    echo "4. Creating default config..."
     cat > "$EXO_DIR/config.json" << 'CFGEOF'
 {
   "estimated_max_chars": 800000,
@@ -115,11 +133,11 @@ if [ ! -f "$EXO_DIR/config.json" ]; then
 }
 CFGEOF
 else
-    echo "3. Config exists, skipping."
+    echo "4. Config exists, skipping."
 fi
 
-# --- 4. Update installed_plugins.json ---
-echo "4. Updating installed_plugins.json..."
+# --- 5. Update installed_plugins.json ---
+echo "5. Updating installed_plugins.json..."
 mkdir -p "$CLAUDE_DIR/plugins"
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -158,8 +176,8 @@ with open(installed_path, "w") as f:
 print(f"   -> {plugin_key} = {version}")
 PYEOF
 
-# --- 5. Install statusline ---
-echo "5. Installing statusline..."
+# --- 6. Install statusline ---
+echo "6. Installing statusline..."
 STATUSLINE_SRC="$SCRIPT_DIR/statusline.sh"
 STATUSLINE_DST="$CLAUDE_DIR/statusline.sh"
 
@@ -171,8 +189,8 @@ else
     echo "   -> statusline.sh not found in source, skipping."
 fi
 
-# --- 6. Enable plugin + statusline in settings.json ---
-echo "6. Updating settings.json..."
+# --- 7. Enable plugin + statusline in settings.json ---
+echo "7. Updating settings.json..."
 
 uv run python << PYEOF
 import json, os

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/env.sh"
 # task-completed.sh — Micro-reflection prompt when tasks complete
 # Called on TaskCompleted: fires when a task is marked as completed
 # (via TaskUpdate tool or when a teammate finishes with in-progress tasks).
