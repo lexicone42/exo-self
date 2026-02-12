@@ -5,7 +5,7 @@
 #   ./deploy.sh          # Install/update plugin
 #   ./deploy.sh --check  # Show what would change without modifying anything
 #
-# Prerequisites: uv (https://astral.sh/uv)
+# Prerequisites: uv (https://astral.sh/uv), jq
 # Works on Linux and macOS.
 
 set -euo pipefail
@@ -40,6 +40,12 @@ echo ""
 if ! command -v uv &>/dev/null; then
     echo "ERROR: uv is required but not found."
     echo "Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    exit 1
+fi
+
+if ! command -v jq &>/dev/null; then
+    echo "ERROR: jq is required but not found (used by statusline)."
+    echo "Install: brew install jq  (macOS) or apt install jq  (Linux)"
     exit 1
 fi
 
@@ -152,14 +158,28 @@ with open(installed_path, "w") as f:
 print(f"   -> {plugin_key} = {version}")
 PYEOF
 
-# --- 5. Enable plugin in settings.json ---
-echo "5. Enabling plugin in settings.json..."
+# --- 5. Install statusline ---
+echo "5. Installing statusline..."
+STATUSLINE_SRC="$SCRIPT_DIR/statusline.sh"
+STATUSLINE_DST="$CLAUDE_DIR/statusline.sh"
+
+if [ -f "$STATUSLINE_SRC" ]; then
+    cp "$STATUSLINE_SRC" "$STATUSLINE_DST"
+    chmod +x "$STATUSLINE_DST"
+    echo "   -> $STATUSLINE_DST"
+else
+    echo "   -> statusline.sh not found in source, skipping."
+fi
+
+# --- 6. Enable plugin + statusline in settings.json ---
+echo "6. Updating settings.json..."
 
 uv run python << PYEOF
 import json, os
 
 settings_path = "$SETTINGS_JSON"
 plugin_key = "$PLUGIN_KEY"
+statusline_dst = "$STATUSLINE_DST"
 
 data = {}
 if os.path.exists(settings_path):
@@ -169,14 +189,34 @@ if os.path.exists(settings_path):
     except Exception:
         pass
 
+changed = False
+
+# Enable plugin
 enabled = data.setdefault("enabledPlugins", {})
-if enabled.get(plugin_key) is True:
-    print("   -> Already enabled.")
-else:
+if enabled.get(plugin_key) is not True:
     enabled[plugin_key] = True
+    changed = True
+    print("   -> Plugin enabled.")
+else:
+    print("   -> Plugin already enabled.")
+
+# Configure statusline
+statusline = data.get("statusLine", {})
+expected = {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 0,
+}
+if statusline != expected:
+    data["statusLine"] = expected
+    changed = True
+    print("   -> Statusline configured.")
+else:
+    print("   -> Statusline already configured.")
+
+if changed:
     with open(settings_path, "w") as f:
         json.dump(data, f, indent=2)
-    print("   -> Enabled.")
 PYEOF
 
 # --- Done ---
