@@ -40,18 +40,29 @@ json.dump(state, open('$EXO_DIR/.context-monitor-state.json', 'w'))
 find "$STATE_DIR" -name "state-*.json" -mmin +1440 -delete 2>/dev/null
 
 # Load last N journal entries, capped at max chars (configurable)
+# Scales automatically with estimated_max_chars for larger context windows (1M+)
 JOURNAL_CONTENT=""
 if [ -f "$JOURNAL" ]; then
     JOURNAL_CONTENT=$(uv run python -c "
 import re, json, os
 cfg_path = os.path.expanduser('$CONFIG')
 max_chars, max_entries = 1500, 2
+estimated_max = 800_000
 try:
     with open(cfg_path) as f:
         cfg = json.load(f)
+    estimated_max = cfg.get('estimated_max_chars', estimated_max)
     max_chars = cfg.get('max_journal_chars', max_chars)
     max_entries = cfg.get('max_journal_entries', max_entries)
 except Exception: pass
+# Scale limits for larger context windows (1M+ tokens ~ 4M+ chars)
+# Only scale if using default values (don't override explicit config)
+if estimated_max > 800_000:
+    scale = min(estimated_max / 800_000, 4.0)  # cap at 4x
+    if max_chars == 1500:
+        max_chars = int(1500 * scale)
+    if max_entries == 2:
+        max_entries = max(2, int(2 * scale))
 with open('$JOURNAL') as f:
     content = f.read()
 entries = re.split(r'\n(?=## )', content)
@@ -64,17 +75,24 @@ print(result)
 fi
 
 # Load interests (unchecked items only, configurable max)
+# Also scales with context window size
 INTERESTS_CONTENT=""
 if [ -f "$INTERESTS" ]; then
     INTERESTS_CONTENT=$(uv run python -c "
 import json, os
 cfg_path = os.path.expanduser('$CONFIG')
 max_items = 5
+estimated_max = 800_000
 try:
     with open(cfg_path) as f:
         cfg = json.load(f)
+    estimated_max = cfg.get('estimated_max_chars', estimated_max)
     max_items = cfg.get('max_interests_items', max_items)
 except Exception: pass
+# Scale for larger context windows
+if estimated_max > 800_000 and max_items == 5:
+    scale = min(estimated_max / 800_000, 4.0)
+    max_items = max(5, int(5 * scale))
 with open('$INTERESTS') as f:
     lines = f.readlines()
 items = [l.strip() for l in lines if l.strip().startswith('- [ ]')]

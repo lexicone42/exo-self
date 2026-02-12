@@ -3,7 +3,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume",
+        "matcher": "startup|resume|clear",
         "hooks": [
           {
             "type": "command",
@@ -60,6 +60,39 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/subagent-start.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/failure-tracker.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/task-completed.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/teammate-idle.sh",
             "timeout": 3
           }
         ]

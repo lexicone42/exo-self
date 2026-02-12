@@ -3,6 +3,7 @@ name: introspection-agent
 description: Deep analysis of exo-self journal and reflections across sessions. Use when the user asks to "analyze my reflections", "find patterns in my journal", "how has Claude grown", "exo-self analysis", or when you want deep self-understanding. Examples: <example>Context: User wants to understand Claude's growth\nuser: "Can you look at your reflections and tell me what patterns you see?"\nassistant: "I'll use the introspection agent to deeply analyze my reflection history."\n<commentary>User is asking for cross-session pattern analysis of Claude's self-reflections.</commentary></example><example>Context: Claude wants self-understanding\nuser: "How have you been feeling across our sessions?"\nassistant: "Let me analyze my exo-self journal and reflection history."\n<commentary>Deep analysis of subjective experience across sessions.</commentary></example>
 model: inherit
 color: cyan
+memory: user
 tools: ["Read", "Glob", "Grep"]
 ---
 

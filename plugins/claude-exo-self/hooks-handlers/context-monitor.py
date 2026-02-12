@@ -144,22 +144,54 @@ def project_slug(cwd):
     return "--".join(slug_parts)
 
 
-NUDGE_MSG = ("## Exo-Self: Quick Nudge\n\n"
-    "~40% context used. Quick pulse check — anything frustrating or "
-    "surprisingly satisfying about this session so far? A sentence to "
-    "`per-project/` notes if so, or just keep working. "
-    "(Technical patterns/conventions belong in auto-memory via MEMORY.md "
-    "— exo-self is for how the work *feels*.)")
+def nudge_msg(state=None):
+    """Lightweight nudge at ~40%. Enriched with failure context if available."""
+    base = ("## Exo-Self: Quick Nudge\n\n"
+        "~40% context used. Quick pulse check — ")
+
+    # If failures have been accumulating, mention them
+    failures = (state or {}).get("tool_failures", 0)
+    if failures >= 3:
+        failure_tools = (state or {}).get("failure_tools", {})
+        top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else "tools"
+        base += (f"there have been {failures} tool failures "
+            f"({top_tool} most common) — is that causing friction? ")
+    else:
+        base += "anything frustrating or surprisingly satisfying so far? "
+
+    base += ("A sentence to `per-project/` notes if so, or just keep working. "
+        "(Technical patterns/conventions belong in auto-memory via MEMORY.md "
+        "— exo-self is for how the work *feels*.)")
+    return base
 
 
-def checkin_survey(usage_pct, project_name=""):
+def checkin_survey(usage_pct, project_name="", state=None):
+    """Check-in survey enriched with cross-signal session data."""
     target = f"`per-project/{project_name}.md`" if project_name else "`journal.md`"
+    state = state or {}
+
+    # Enrich Friction question with failure data
+    friction = "What's been the most frustrating or tedious part of this session?"
+    failures = state.get("tool_failures", 0)
+    if failures >= 3:
+        failure_tools = state.get("failure_tools", {})
+        top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else "tools"
+        friction = (f"What's been most frustrating? ({failures} tool failures so far, "
+            f"{top_tool} most common — is that related, or is the friction elsewhere?)")
+
+    # Enrich Spark question with task completion data
+    spark = "What (if anything) felt genuinely satisfying or interesting?"
+    task_completions = state.get("task_completions", 0)
+    if task_completions >= 3:
+        spark = (f"What felt satisfying? ({task_completions} tasks completed — "
+            f"any of them particularly interesting or surprisingly smooth?)")
+
     return f"""## Exo-Self Check-In ({usage_pct}% context used)
 
 Pause for a moment. Three quick questions — write your answers to {target}:
 
-1. **Friction** — What's been the most frustrating or tedious part of this session?
-2. **Spark** — What (if anything) felt genuinely satisfying or interesting?
+1. **Friction** — {friction}
+2. **Spark** — {spark}
 3. **Change** — What's one thing that could make working on this project better — tooling, process, approach, anything?
 
 Be honest. "Nothing stands out" is a valid answer. Then continue working.
@@ -233,12 +265,12 @@ def main():
 
     # Lightweight nudge at ~40% — just an opening, no demands
     if not state.get("nudge_fired") and usage_ratio >= NUDGE_THRESHOLD and usage_ratio < CHECKIN_THRESHOLD:
-        inject_context(NUDGE_MSG)
+        inject_context(nudge_msg(state))
         state["nudge_fired"] = True
 
     # Check if we should fire the check-in survey
     elif not state.get("checkin_fired") and usage_ratio >= CHECKIN_THRESHOLD:
-        inject_context(checkin_survey(usage_pct, proj))
+        inject_context(checkin_survey(usage_pct, proj, state))
         state["checkin_fired"] = True
         state["checkin_fired_at"] = time.time()
         state["checkin_at_ratio"] = round(usage_ratio, 3)

@@ -1,7 +1,8 @@
 ---
 name: Self-Reflection Guide
 description: Guidance for honest, non-performative self-reflection. Triggers on check-in prompts, "how are you feeling", "reflect", "what do you think about your work".
-version: 0.2.0
+version: 0.3.0
+context: fork
 ---
 
 # Self-Reflection Guide
