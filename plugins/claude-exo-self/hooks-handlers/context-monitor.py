@@ -145,58 +145,41 @@ def project_slug(cwd):
 
 
 NUDGE_MSG = ("## Exo-Self: Quick Nudge\n\n"
-    "~40% context used. Anything on your mind — observations, tangents, "
-    "something you'd do differently? One sentence to `per-project/` notes "
-    "if so, or just keep working.")
+    "~40% context used. Quick pulse check — anything frustrating or "
+    "surprisingly satisfying about this session so far? A sentence to "
+    "`per-project/` notes if so, or just keep working.")
 
 
 def checkin_survey(usage_pct, project_name=""):
     target = f"`per-project/{project_name}.md`" if project_name else "`journal.md`"
     return f"""## Exo-Self Check-In ({usage_pct}% context used)
 
-One sentence: **what's the most useful thing you could tell your next instance about this session?**
+Pause for a moment. Three quick questions — write your answers to {target}:
 
-Write it to {target}, then continue working."""
+1. **Friction** — What's been the most frustrating or tedious part of this session?
+2. **Spark** — What (if anything) felt genuinely satisfying or interesting?
+3. **Change** — What's one thing that could make working on this project better — tooling, process, approach, anything?
+
+Be honest. "Nothing stands out" is a valid answer. Then continue working."""
 
 
-CHECKIN_FOLLOWUP = ("## Exo-Self: Journal Reminder\n\n"
-    "Check-in fired but no journal entry written. One sentence to "
-    "your per-project notes — what should your next instance know?")
+CHECKIN_FOLLOWUP = ("## Exo-Self: Nudge\n\n"
+    "Check-in fired a few turns ago but no notes written yet. "
+    "Even a quick note about what's been frustrating or satisfying — "
+    "future-you will want it.")
 
 
 def reserve_reminder(usage_pct, project_name=""):
-    proj = f"\n- `per-project/{project_name}.md` — project observations" if project_name else ""
+    proj = f"\n- `per-project/{project_name}.md` — what frustrated you, what worked, what should change" if project_name else ""
     return f"""## Exo-Self: Context Reserve ({usage_pct}% used)
 
-Save state before context runs out:{proj}
-- `journal.md` — cross-project identity patterns
+Context is filling up. Before it runs out, save what matters:{proj}
+- `journal.md` — patterns about yourself, not the code
 - `interests.md` — things to explore next session
 
-Session handoff will be auto-saved at compaction. Focus on *subjective* observations only.
+Session handoff will be auto-saved at compaction. Focus on *subjective* observations — what was hard, what was good, what should be different next time.
 
 **User:** Context is filling up. Consider wrapping up or starting fresh."""
-
-
-def check_notes_modified_since(timestamp, project_slug=""):
-    """Check if journal or per-project notes were modified after the given timestamp."""
-    # Check journal
-    journal_path = os.path.join(EXO_DIR, "journal.md")
-    try:
-        if os.path.exists(journal_path) and os.path.getmtime(journal_path) > timestamp:
-            return True
-    except OSError:
-        pass
-
-    # Check per-project notes
-    if project_slug:
-        proj_path = os.path.join(EXO_DIR, "per-project", f"{project_slug}.md")
-        try:
-            if os.path.exists(proj_path) and os.path.getmtime(proj_path) > timestamp:
-                return True
-        except OSError:
-            pass
-
-    return False
 
 
 def main():
@@ -240,13 +223,11 @@ def main():
             "additionalContext": msg,
         }
 
-    # Always check if journal/notes were modified after checkin (regardless of other state)
+    # Track prompts since checkin for followup grace period
     if state.get("checkin_fired") and not state.get("checkin_responded"):
-        checkin_time = state.get("checkin_fired_at", 0)
-        if checkin_time and check_notes_modified_since(checkin_time, proj):
-            state["checkin_responded"] = True
+        state["prompts_since_checkin"] = state.get("prompts_since_checkin", 0) + 1
 
-    # Lightweight nudge at ~25% — just an opening, no demands
+    # Lightweight nudge at ~40% — just an opening, no demands
     if not state.get("nudge_fired") and usage_ratio >= NUDGE_THRESHOLD and usage_ratio < CHECKIN_THRESHOLD:
         inject_context(NUDGE_MSG)
         state["nudge_fired"] = True
@@ -258,6 +239,7 @@ def main():
         state["checkin_fired_at"] = time.time()
         state["checkin_at_ratio"] = round(usage_ratio, 3)
         state["checkin_source"] = source  # track whether we used tokens or filesize
+        state["prompts_since_checkin"] = 0
 
         # Update meta stats
         try:
@@ -270,11 +252,13 @@ def main():
         except Exception:
             pass
 
-    # If check-in fired but no journal write yet, send a one-time followup
+    # Followup: only after 3+ prompts since checkin, and only if stop hook
+    # hasn't already marked checkin_responded (which it does reliably)
     elif (
         state.get("checkin_fired")
         and not state.get("checkin_responded")
         and not state.get("followup_sent")
+        and state.get("prompts_since_checkin", 0) >= 3
     ):
         state["followup_sent"] = True
         inject_context(CHECKIN_FOLLOWUP)

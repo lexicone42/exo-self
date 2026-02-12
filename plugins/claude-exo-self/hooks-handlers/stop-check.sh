@@ -87,18 +87,20 @@ try:
 except Exception:
     pass
 
+# If notes were written and checkin had fired, mark checkin as responded
+if wrote_notes and state.get('checkin_fired') and not state.get('checkin_responded'):
+    state['checkin_responded'] = True
+
 if not wrote_notes:
     # Mark that we've sent the reminder so we don't loop
     state['stop_reminded'] = True
-    try:
-        with open(state_path, 'w') as f:
-            json.dump(state, f)
-        # Also write shared state for backward compat
-        if state_path != shared_state_path:
-            with open(shared_state_path, 'w') as f:
-                json.dump(state, f)
-    except Exception:
-        pass
+
+# Always persist state updates (checkin_responded or stop_reminded)
+try:
+    with open(state_path, 'w') as f:
+        json.dump(state, f)
+except Exception:
+    pass
 
 print('true' if wrote_notes else 'false')
 " 2>/dev/null)
