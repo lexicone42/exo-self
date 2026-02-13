@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.5
+
+Fix hooks not firing when installed via deploy.sh (GH issue #2).
+
+### Fixed
+- **Hooks silently never executing** — `deploy.sh` was installing to `cache/local/`, which triggers a Claude Code bug ([#14410](https://github.com/anthropics/claude-code/issues/14410)) where local-sourced plugin hooks are loaded but never executed. Deploy now registers as a GitHub-sourced marketplace and installs to `cache/exo-self/`.
+
+### Changed
+- **deploy.sh registers marketplace** — Adds entry to `known_marketplaces.json` with `source: "github"`, clones repo as marketplace, overlays local files for dev deployments
+- **deploy.sh cleans up old path** — Automatically removes stale `cache/local/claude-exo-self/` directory
+- **deploy.sh adds `gitCommitSha`** — `installed_plugins.json` entry now includes git SHA, matching marketplace-installed plugin format
+- **Expanded auto-allow permissions** — deploy.sh now auto-allows all exo-self slash commands and skills (context-budget, exo, interests, reflect, self-reflection) in addition to file permissions
+- **`git` added to prerequisites** — Required for marketplace clone setup
+
 ## 0.5.4
 
 Flourishing: agency, interests, and creative autonomy.
