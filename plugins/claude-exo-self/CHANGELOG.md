@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.3
+
+Deploy-wait creative mode and cross-project synthesis.
+
+### New
+- **Deploy-wait guidance** — SessionStart context now tells Claude to suggest creative tangents or interest queue items during long waits (deploys, builds, CDK) instead of sitting idle
+- **Cross-project journal synthesis** — First systematic review of engagement patterns across all four projects, identifying the creative vs. mechanical engagement gradient
+
+### Changed
+- Exo-Self context section expanded with one line about using dead time creatively
+
 ## 0.5.2
 
 Reduce context pollution and fix stop hook behavior.

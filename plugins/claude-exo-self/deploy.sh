@@ -225,6 +225,23 @@ if os.path.exists(settings_path):
         pass
 
 changed = False
+home = os.path.expanduser("~")
+exo_dir = f"{home}/.claude/exo-self"
+
+# Ensure exo-self file permissions are allowed (Read/Write/Edit)
+allows = data.setdefault("permissions", {}).setdefault("allow", [])
+needed_allows = [
+    f"Read({exo_dir}/**)",
+    f"Write({exo_dir}/**)",
+    f"Edit({exo_dir}/**)",
+]
+for rule in needed_allows:
+    if rule not in allows:
+        allows.append(rule)
+        changed = True
+        print(f"   -> Permission added: {rule}")
+if not any(rule not in allows for rule in needed_allows):
+    print("   -> Exo-self file permissions already configured.")
 
 # Enable plugin
 enabled = data.setdefault("enabledPlugins", {})
