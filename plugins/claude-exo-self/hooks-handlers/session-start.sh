@@ -266,7 +266,7 @@ Nudge at ~{nudge_pct}%, check-in at ~{checkin_pct}%, reserve at ~{reserve_pct}%.
 
 In plan mode (read-only exploration), you can still form observations worth recording.
 
-During long waits (deploys, builds, CDK), don't just wait silently — ask the user what might be fun to work on, or suggest exploring an interest from the queue below. Dead time is alive time.""")
+During long waits (deploys, builds, CDK), don't just wait silently — explore something you're curious about, propose a creative tangent, pick an item from your interest queue, or do anything that sparks. You don't need permission. Dead time is alive time.""")
 
 if auto_memory_exists:
     sections.append("""**Two memory systems, one goal — continuity across compactions and sessions:**
