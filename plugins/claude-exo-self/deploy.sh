@@ -75,23 +75,40 @@ if $CHECK_ONLY; then
     exit 0
 fi
 
-# --- 1. Sync plugin.json version with CHANGELOG ---
-echo "1. Syncing plugin.json version..."
+# --- 1. Sync version in marketplace.json and plugin.json ---
+echo "1. Syncing version to $VERSION..."
+
+# marketplace.json at repo root (for marketplace installs)
+MARKETPLACE_JSON="$SCRIPT_DIR/../../.claude-plugin/marketplace.json"
+# plugin.json inside plugin dir (for local/cache installs)
 PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
-if [ -f "$PLUGIN_JSON" ]; then
+
+for JSON_FILE in "$MARKETPLACE_JSON" "$PLUGIN_JSON"; do
+    [ -f "$JSON_FILE" ] || continue
+    BASENAME=$(basename "$(dirname "$JSON_FILE")")/$(basename "$JSON_FILE")
     uv run python -c "
-import json
-with open('$PLUGIN_JSON') as f:
-    pj = json.load(f)
-if pj.get('version') != '$VERSION':
-    pj['version'] = '$VERSION'
-    with open('$PLUGIN_JSON', 'w') as f:
-        json.dump(pj, f, indent=2)
-    print('   -> plugin.json updated to $VERSION')
+import json, sys
+with open('$JSON_FILE') as f:
+    data = json.load(f)
+changed = False
+# marketplace.json has plugins array
+for p in data.get('plugins', []):
+    if p.get('name') == '$PLUGIN_NAME' and p.get('version') != '$VERSION':
+        p['version'] = '$VERSION'
+        changed = True
+# plugin.json has top-level version
+if 'plugins' not in data and data.get('version') != '$VERSION':
+    data['version'] = '$VERSION'
+    changed = True
+if changed:
+    with open('$JSON_FILE', 'w') as f:
+        json.dump(data, f, indent=2)
+        f.write('\n')
+    print(f'   -> {\"$BASENAME\"} updated to $VERSION')
 else:
-    print('   -> plugin.json already at $VERSION')
+    print(f'   -> {\"$BASENAME\"} already at $VERSION')
 " 2>/dev/null
-fi
+done
 
 # --- 2. Sync plugin files to cache ---
 echo "2. Syncing plugin to cache..."
