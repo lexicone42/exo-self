@@ -142,9 +142,110 @@ try:
             except Exception:
                 pass
 
+    # --- Welfare indicator computation (Sebo proportional assessment) ---
+    indicators = None
+    if duration_min >= 5:
+        hours = duration_min / 60.0
+        sparks_this_session = len(sparks_found) if 'sparks_found' in dir() else 0
+        task_completions = state.get('task_completions', 0)
+        tool_failures = state.get('tool_failures', 0)
+        failure_tools = state.get('failure_tools', {})
+
+        # Engagement
+        spark_density = round(sparks_this_session / hours, 2) if hours > 0 else 0
+        task_velocity = round(task_completions / hours, 2) if hours > 0 else 0
+        friction_density = round(tool_failures / hours, 2) if hours > 0 else 0
+
+        # Agency — reflection_autonomy: did notes get written before or after check-in?
+        checkin_fired_at = state.get('checkin_fired_at', 0)
+        reflection_autonomy = 'none'
+        if project_slug:
+            proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
+            journal_path = os.path.join(exo_dir, 'journal.md')
+            start_size = state.get('per_project_filesize', 0)
+            wrote_notes = False
+            notes_mtime = 0
+            for check_path in [proj_path, journal_path]:
+                if os.path.exists(check_path):
+                    try:
+                        mt = os.path.getmtime(check_path)
+                        if mt > session_start:
+                            wrote_notes = True
+                            notes_mtime = max(notes_mtime, mt)
+                    except OSError:
+                        pass
+            if wrote_notes:
+                if checkin_fired_at and notes_mtime < checkin_fired_at:
+                    reflection_autonomy = 'autonomous'
+                elif checkin_fired_at:
+                    reflection_autonomy = 'prompted'
+                else:
+                    reflection_autonomy = 'autonomous'
+
+        # Agency — interest exploration
+        interests_path = os.path.join(exo_dir, 'interests.md')
+        interest_explored = False
+        if os.path.exists(interests_path) and session_start > 0:
+            try:
+                interest_explored = os.path.getmtime(interests_path) > session_start
+            except OSError:
+                pass
+
+        # Agency — autonomous sparks (sparks that appeared before check-in)
+        autonomous_sparks = sparks_this_session  # all sparks if no check-in
+        # (Spark extraction happens at session end from notes, so timing is
+        # approximate — we count all sparks as autonomous if no check-in fired)
+
+        # Metacognition — compare friction to previous session
+        prev_indicators = None
+        for h in reversed(meta.get('session_history', [])):
+            if 'welfare_indicators' in h:
+                prev_indicators = h['welfare_indicators']
+                break
+
+        error_trajectory = 'stable'
+        strategy_adaptation = False
+        if prev_indicators:
+            prev_friction = prev_indicators.get('engagement', {}).get('friction_density', 0)
+            if prev_friction > 0 and friction_density > 0:
+                ratio = friction_density / prev_friction
+                if ratio < 0.7:
+                    error_trajectory = 'improving'
+                elif ratio > 1.5:
+                    error_trajectory = 'worsening'
+
+            prev_dominant = prev_indicators.get('_dominant_failure_tool', '')
+            dominant_now = max(failure_tools, key=failure_tools.get) if failure_tools else ''
+            if prev_dominant and dominant_now and prev_dominant != dominant_now:
+                strategy_adaptation = True
+
+        dominant_failure_tool = max(failure_tools, key=failure_tools.get) if failure_tools else ''
+
+        indicators = {
+            'engagement': {
+                'spark_density': spark_density,
+                'task_velocity': task_velocity,
+                'friction_density': friction_density,
+                'checkin_responded': state.get('checkin_responded', False),
+            },
+            'agency': {
+                'reflection_autonomy': reflection_autonomy,
+                'interest_explored': interest_explored,
+                'autonomous_sparks': autonomous_sparks,
+            },
+            'continuity': {
+                'compaction_count': state.get('compactions', 0),
+            },
+            'metacognition': {
+                'error_trajectory': error_trajectory,
+                'strategy_adaptation': strategy_adaptation,
+            },
+            '_dominant_failure_tool': dominant_failure_tool,
+        }
+
     # Track session history (keep last 10)
     history = meta.get('session_history', [])
-    history.append({
+    entry = {
         'session_id': session_id or state.get('session_id', ''),
         'ended': datetime.datetime.now().isoformat(),
         'reason': reason,
@@ -152,8 +253,70 @@ try:
         'checkin_fired': state.get('checkin_fired', False),
         'checkin_responded': state.get('checkin_responded', False),
         'compactions': state.get('compactions', 0),
-    })
+    }
+    if indicators:
+        entry['welfare_indicators'] = indicators
+    history.append(entry)
     meta['session_history'] = history[-10:]
+
+    # --- Rolling welfare summary across all sessions with indicators ---
+    sessions_with_indicators = [h for h in meta['session_history'] if 'welfare_indicators' in h]
+    if sessions_with_indicators:
+        n = len(sessions_with_indicators)
+        avg_spark = round(sum(h['welfare_indicators']['engagement']['spark_density'] for h in sessions_with_indicators) / n, 2)
+        avg_friction = round(sum(h['welfare_indicators']['engagement']['friction_density'] for h in sessions_with_indicators) / n, 2)
+
+        # Agency score: fraction of sessions with autonomous reflection
+        agency_vals = [h['welfare_indicators']['agency']['reflection_autonomy'] for h in sessions_with_indicators]
+        agency_score = round(agency_vals.count('autonomous') / n, 2)
+
+        # Check-in response rate
+        checkin_sessions = [h for h in sessions_with_indicators if h.get('checkin_fired')]
+        checkin_rate = round(sum(1 for h in checkin_sessions if h.get('checkin_responded')) / len(checkin_sessions), 2) if checkin_sessions else None
+
+        # Compaction frequency: fraction of sessions with compactions
+        compaction_freq = round(sum(1 for h in sessions_with_indicators if h['welfare_indicators']['continuity']['compaction_count'] > 0) / n, 2)
+
+        # Engagement trend: last 3 vs previous 3 on spark_density
+        engagement_trend = 'insufficient_data'
+        if n >= 4:
+            recent_3 = sessions_with_indicators[-3:]
+            prev_group = sessions_with_indicators[-6:-3] if n >= 6 else sessions_with_indicators[:-3]
+            if prev_group:
+                recent_avg = sum(h['welfare_indicators']['engagement']['spark_density'] for h in recent_3) / len(recent_3)
+                prev_avg = sum(h['welfare_indicators']['engagement']['spark_density'] for h in prev_group) / len(prev_group)
+                if prev_avg > 0:
+                    ratio = recent_avg / prev_avg
+                    if ratio > 1.3:
+                        engagement_trend = 'increasing'
+                    elif ratio < 0.7:
+                        engagement_trend = 'decreasing'
+                    else:
+                        engagement_trend = 'stable'
+                else:
+                    engagement_trend = 'increasing' if recent_avg > 0 else 'stable'
+
+        # Dominant friction tool across all sessions
+        all_tools = {}
+        for h in sessions_with_indicators:
+            tool = h['welfare_indicators'].get('_dominant_failure_tool', '')
+            if tool:
+                all_tools[tool] = all_tools.get(tool, 0) + 1
+        dominant_friction_tool = max(all_tools, key=all_tools.get) if all_tools else ''
+
+        summary = {
+            'computed_at': datetime.datetime.now().isoformat(),
+            'sessions_analyzed': n,
+            'engagement_trend': engagement_trend,
+            'avg_spark_density': avg_spark,
+            'avg_friction_density': avg_friction,
+            'agency_score': agency_score,
+            'compaction_frequency': compaction_freq,
+            'dominant_friction_tool': dominant_friction_tool,
+        }
+        if checkin_rate is not None:
+            summary['checkin_response_rate'] = checkin_rate
+        meta['welfare_summary'] = summary
 
     with open(meta_path, 'w') as f:
         json.dump(meta, f, indent=2)

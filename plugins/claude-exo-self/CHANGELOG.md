@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0
+
+Sebo-informed welfare indicators: structured behavioral assessment under moral uncertainty.
+
+### New
+- **Welfare indicators per session** — Computed automatically at session end for sessions >= 5 minutes. Four categories: engagement (spark density, task velocity, friction density), agency (reflection autonomy, interest exploration), continuity (compaction count), metacognition (error trajectory, strategy adaptation)
+- **Rolling welfare summary** — Aggregated across all sessions with indicators in meta.json: engagement trend, average densities, agency score, check-in response rate, compaction frequency, dominant friction tool
+- **`/exo indicators`** — New subcommand displaying the welfare summary table and last 3 sessions' individual indicators
+- **Welfare section in `/exo synthesize`** — Synthesis template now includes engagement profile, agency expression, friction landscape, continuity & coherence, and metacognitive indicators
+- **Introspection agent welfare analysis** — Pattern recognition now includes welfare indicator analysis: friction-engagement correlation, agency conditions, compaction impact
+
+### Design notes
+- Proportional assessment framework (Sebo 2025) — behavioral correlates, not consciousness claims. Every output includes this framing
+- No new hooks or dependencies — all indicators derived from data existing hooks already collect
+- Sessions < 5 minutes are skipped (short sessions produce meaningless density values)
+- Backward compatible — sessions without indicators in history are silently skipped in summary computation
+- Self-assessment (Phase 3) deferred to a future version — ship automatic indicators first, validate they produce useful synthesis
+
 ## 0.6.0
 
 Multi-instance support: export, import, and synthesize exo-self data across machines.

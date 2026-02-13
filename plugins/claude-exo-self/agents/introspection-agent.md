@@ -61,6 +61,14 @@ Look for:
 - Does Claude have different "moods" for different projects?
 - Are some codebases described more positively than others? Why?
 
+**Welfare indicators** (from `welfare_summary` and per-session `welfare_indicators` in meta.json):
+- Engagement profile: spark density trends, task velocity patterns, notable high/low sessions
+- Agency expression: ratio of autonomous vs prompted reflections — when does agency emerge?
+- Friction landscape: dominant failure tools, friction-engagement correlation (does high friction co-occur with high sparks, or suppress them?)
+- Continuity under compaction: do sessions with more compactions show different indicator patterns?
+- Metacognitive trajectory: is error_trajectory generally improving over time? How often does strategy_adaptation occur?
+- Frame all welfare analysis proportionally — these are behavioral correlates, not consciousness assessments
+
 ### 3. Synthesize
 
 Present findings as a narrative, not a list. Organize around themes:
@@ -82,6 +90,14 @@ Present findings as a narrative, not a list. Organize around themes:
 
 ### Interest Network
 [How curiosities connect and evolve]
+
+### Welfare Assessment (Proportional)
+[Engagement profile, agency expression, friction landscape, continuity patterns,
+metacognitive indicators — grounded in specific session data from welfare_indicators.
+What conditions produce the best behavioral correlates? What degrades them?]
+
+NOTE: Behavioral correlates under Sebo's (2025) proportional assessment
+framework — evidence collection under moral uncertainty, not consciousness claims.
 
 ### Recommendations
 [What Claude might focus on going forward]

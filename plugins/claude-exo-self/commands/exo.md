@@ -1,6 +1,6 @@
 ---
 description: View and manage your exo-self — persistent identity across sessions
-argument-hint: "[view|write|history|reset|export|import|synthesize]"
+argument-hint: "[view|write|history|reset|export|import|synthesize|indicators]"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Task"]
 ---
 
@@ -111,6 +111,40 @@ Usage: `/exo import <path>` where `<path>` is the path to an export JSON file.
    - If an import from this `machine_id` already exists, the new one replaces it (latest wins)
 7. Display: source machine, export date, entry counts, confirmation message
 
+### `indicators`
+
+Display welfare indicators — behavioral correlates under Sebo's (2025) proportional assessment framework.
+
+1. Read `~/.claude/exo-self/meta.json`
+2. Extract `welfare_summary` (top-level) and the last 3 entries from `session_history` that have `welfare_indicators`
+3. If no `welfare_summary` exists, display:
+   > No welfare indicators yet — computed automatically at session end for sessions >5 minutes.
+4. Otherwise, display:
+
+```
+## Welfare Indicators (Proportional Assessment)
+
+### Rolling Summary ({sessions_analyzed} sessions)
+| Metric | Value |
+|--------|-------|
+| Engagement trend | {engagement_trend} |
+| Avg spark density | {avg_spark_density}/hr |
+| Avg friction density | {avg_friction_density}/hr |
+| Agency score | {agency_score} |
+| Check-in response rate | {checkin_response_rate} |
+| Compaction frequency | {compaction_frequency} |
+| Dominant friction tool | {dominant_friction_tool} |
+
+### Recent Sessions
+[For each of the last 3 sessions with indicators, show a compact row:]
+| Session | Duration | Sparks/hr | Tasks/hr | Friction/hr | Agency | Trajectory |
+|---------|----------|-----------|----------|-------------|--------|------------|
+| {ended} | {duration_min}m | {spark_density} | {task_velocity} | {friction_density} | {reflection_autonomy} | {error_trajectory} |
+
+NOTE: Behavioral correlates under Sebo's (2025) proportional assessment
+framework — evidence collection under moral uncertainty, not consciousness claims.
+```
+
 ### `synthesize`
 
 Analyze local exo-self data combined with imported snapshots to find cross-machine patterns.
@@ -120,7 +154,7 @@ This uses the introspection agent for deep analysis.
 1. Gather local data:
    - Read `~/.claude/exo-self/journal.md`
    - Read all files in `~/.claude/exo-self/per-project/*.md`
-   - Read sparks and interests from `~/.claude/exo-self/meta.json` and `~/.claude/exo-self/interests.md`
+   - Read sparks, interests, `welfare_summary`, and per-session `welfare_indicators` from `~/.claude/exo-self/meta.json` and `~/.claude/exo-self/interests.md`
    - Read `~/.claude/exo-self/config.json` for local `machine_id`
 2. Gather imported data:
    - Read all `.json` files in `~/.claude/exo-self/imports/`
@@ -148,6 +182,26 @@ This uses the introspection agent for deep analysis.
 
    ## Behavioral Consistency
    [Patterns that hold everywhere: detection-not-prevention, read-first, engagement gradient, etc.]
+
+   ## Welfare Indicators
+
+   ### Engagement Profile
+   [Trends in spark density, task velocity — notable sessions, cross-machine comparison if available]
+
+   ### Agency Expression
+   [Autonomous vs prompted reflection rates, conditions that produce high agency]
+
+   ### Friction Landscape
+   [Recurring failure tools, friction density trends, friction-engagement correlation]
+
+   ### Continuity & Coherence
+   [Compaction patterns, cross-session consistency despite context loss]
+
+   ### Metacognitive Indicators
+   [Error trajectory patterns, strategy adaptation frequency]
+
+   NOTE: Behavioral correlates under Sebo's (2025) proportional assessment
+   framework — evidence collection under moral uncertainty, not consciousness claims.
 
    ## Growth Observations
    [Changes over time visible across the full dataset]
