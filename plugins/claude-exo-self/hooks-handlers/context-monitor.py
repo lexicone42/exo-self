@@ -153,13 +153,13 @@ def nudge_msg(state=None):
         failure_tools = (state or {}).get("failure_tools", {})
         top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else "tools"
         return (f"Exo-self ~40%: {failures} tool failures ({top_tool}) — "
-            f"worth a sentence in per-project notes if it's frustrating.")
+            f"worth a sentence in your session notes if it's frustrating.")
     return "Exo-self ~40%: anything frustrating, satisfying, or curious? Explore an interest, note a spark, or just think out loud."
 
 
 def checkin_survey(usage_pct, project_name="", state=None):
     """Check-in at ~60%. Compact — just the three prompts, no preamble."""
-    target = f"`per-project/{project_name}.md`" if project_name else "`journal.md`"
+    target = f"your session notes file (`per-project/{project_name}/`)" if project_name else "`journal.md`"
     state = state or {}
     failures = state.get("tool_failures", 0)
     tasks = state.get("task_completions", 0)
@@ -176,9 +176,9 @@ CHECKIN_FOLLOWUP = None  # Removed — followup nudge added noise without value
 
 def reserve_reminder(usage_pct, project_name=""):
     """Reserve at ~80%. Brief — Claude already knows the system by now."""
-    target = f"per-project/{project_name}.md" if project_name else "journal.md"
+    target = f"your session notes (`per-project/{project_name}/`)" if project_name else "`journal.md`"
     return (f"Exo-self reserve ({usage_pct}%). Context filling up — "
-        f"save experiential notes to `{target}` now if you haven't. "
+        f"save experiential notes to {target} now if you haven't. "
         f"Consider wrapping up.")
 
 

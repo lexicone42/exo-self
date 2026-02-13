@@ -95,7 +95,7 @@ def main():
 
         msg = (
             f"Exo-self: {failures} tool failures ({top_tool}: {top_count}x). "
-            f"Worth noting in per-project notes if it's causing friction."
+            f"Worth noting in your session notes if it's causing friction."
         )
 
         result["hookSpecificOutput"] = {

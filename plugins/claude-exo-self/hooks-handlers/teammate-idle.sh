@@ -36,19 +36,22 @@ if os.path.exists(journal_path):
     except Exception:
         pass
 
-# Load per-project notes for this project
+# Load most recent per-project notes for this project
 input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
 cwd = input_data.get('cwd', '')
 project_notes_snippet = ''
 if cwd:
+    import glob
     parts = cwd.rstrip('/').split('/')
     slug_parts = parts[-2:] if len(parts) >= 2 else parts[-1:]
     slug = '--'.join(slug_parts)
-    proj_path = os.path.join(exo_dir, 'per-project', f'{slug}.md')
-    if os.path.exists(proj_path):
+    notes_dir = os.path.join(exo_dir, 'per-project', slug)
+    if os.path.isdir(notes_dir):
         try:
-            with open(proj_path) as f:
-                project_notes_snippet = f.read(800).strip()
+            files = sorted(glob.glob(os.path.join(notes_dir, '*.md')), key=os.path.getmtime, reverse=True)
+            if files:
+                with open(files[0]) as f:
+                    project_notes_snippet = f.read(800).strip()
         except Exception:
             pass
 

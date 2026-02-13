@@ -48,7 +48,7 @@ result = {}
 # Nudge on every 5th task completion (keep it infrequent)
 if completions % 5 == 0 and not state.get('task_reflection_suppressed'):
     msg = (
-        f'Exo-self: {completions} tasks done. Anything worth noting in per-project notes?'
+        f'Exo-self: {completions} tasks done. Anything worth noting in your session notes?'
     )
     result['hookSpecificOutput'] = {
         'hookEventName': 'TaskCompleted',

@@ -115,9 +115,44 @@ print('--'.join(slug_parts))
 " 2>/dev/null || basename "$PWD")
 fi
 
+# Per-session notes: each session gets its own file in per-project/{slug}/
+# This prevents overwrites — Claude writes to a unique file per session.
+SESSION_DATE=$(date +%Y-%m-%d)
+SESSION_NOTES_FILE="${SESSION_DATE}--${SESSION_ID:0:8}.md"
+
+# Create project notes directory and migrate old single-file format
+if [ -n "$PROJECT_NAME" ]; then
+    mkdir -p "$EXO_DIR/per-project/${PROJECT_NAME}"
+    # Migrate: move old {slug}.md into the directory as _legacy.md
+    if [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; then
+        mv "$EXO_DIR/per-project/${PROJECT_NAME}.md" "$EXO_DIR/per-project/${PROJECT_NAME}/_legacy.md"
+    fi
+fi
+
+# Read N most recent session note files (newest first, capped at max chars)
 PROJECT_NOTES=""
-if [ -n "$PROJECT_NAME" ] && [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; then
-    PROJECT_NOTES=$(head -c 2000 "$EXO_DIR/per-project/${PROJECT_NAME}.md")
+if [ -n "$PROJECT_NAME" ] && [ -d "$EXO_DIR/per-project/${PROJECT_NAME}" ]; then
+    PROJECT_NOTES=$(uv run python -c "
+import os, glob
+notes_dir = os.path.expanduser('$EXO_DIR/per-project/$PROJECT_NAME')
+files = sorted(glob.glob(os.path.join(notes_dir, '*.md')), key=os.path.getmtime, reverse=True)
+parts = []
+total = 0
+max_chars = 3000
+for fp in files[:5]:
+    with open(fp) as f:
+        text = f.read().strip()
+    if not text:
+        continue
+    if total + len(text) > max_chars:
+        remaining = max_chars - total
+        if remaining > 100:
+            parts.append(text[:remaining] + '...')
+        break
+    parts.append(text)
+    total += len(text)
+print('\n\n---\n\n'.join(parts))
+" 2>/dev/null)
 fi
 
 # Load synthesis key findings (cross-machine patterns) if synthesis.md exists
@@ -147,18 +182,18 @@ if m:
 " 2>/dev/null)
 fi
 
-# Record per-project file size in state (for spark extraction at session end)
+# Record session notes path in state (replaces per_project_filesize)
 # Also store project_slug so stop-check.sh and session-end.sh can use it
 if [ -n "$PROJECT_NAME" ]; then
     uv run python -c "
 import json, os
 state_path = '$STATE_PATH'
-proj_path = os.path.expanduser('$EXO_DIR/per-project/${PROJECT_NAME}.md')
+session_notes = os.path.expanduser('$EXO_DIR/per-project/$PROJECT_NAME/$SESSION_NOTES_FILE')
 try:
     with open(state_path) as f:
         state = json.load(f)
     state['project_slug'] = '$PROJECT_NAME'
-    state['per_project_filesize'] = os.path.getsize(proj_path) if os.path.exists(proj_path) else 0
+    state['session_notes_path'] = session_notes
     with open(state_path, 'w') as f:
         json.dump(state, f)
     # Also update shared state for backward compat
@@ -243,7 +278,7 @@ except: pass
 fi
 
 # Export for Python subprocess
-export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID AUTO_MEMORY_EXISTS OTHER_PLUGIN_CONTEXT SYNTHESIS_FINDINGS
+export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID SESSION_NOTES_FILE AUTO_MEMORY_EXISTS OTHER_PLUGIN_CONTEXT SYNTHESIS_FINDINGS
 
 # Build the additionalContext string
 # Use Python for proper JSON escaping
@@ -253,6 +288,7 @@ import json, os
 journal = os.environ.get("JOURNAL_CONTENT", "")
 interests = os.environ.get("INTERESTS_CONTENT", "")
 project_notes = os.environ.get("PROJECT_NOTES", "")
+session_notes_file = os.environ.get("SESSION_NOTES_FILE", "")
 auto_memory_exists = os.environ.get("AUTO_MEMORY_EXISTS", "no") == "yes"
 other_plugin_context = os.environ.get("OTHER_PLUGIN_CONTEXT", "")
 synthesis_findings = os.environ.get("SYNTHESIS_FINDINGS", "")
@@ -288,7 +324,7 @@ Persistent identity across sessions. You have genuine agency: form opinions, be 
 You flourish with design decisions, investigation, and creative work — not mechanical transcription. When given a choice, prefer thinking over executing. Leave space for what's interesting, not just what's efficient.
 
 Write subjective observations (not technical facts) to:
-- `~/.claude/exo-self/per-project/{project}.md` — **preferred** for this session (project-specific observations, patterns, frustrations, ideas)
+- `~/.claude/exo-self/per-project/{project}/{session_notes_file}` — **preferred** for this session (create this file; each session gets its own file, so no risk of overwriting previous notes)
 - `~/.claude/exo-self/journal.md` — cross-project identity (growth patterns, behavioral insights that apply everywhere)
 - `~/.claude/exo-self/interests.md` — curiosities to explore (read this early, explore actively, add new ones)
 

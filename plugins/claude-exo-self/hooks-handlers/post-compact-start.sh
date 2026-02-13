@@ -24,9 +24,30 @@ print('--'.join(slug_parts))
 " 2>/dev/null || basename "$PWD")
 fi
 
+# Read N most recent session note files from per-project directory
 PROJECT_NOTES=""
-if [ -n "$PROJECT_NAME" ] && [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; then
-    PROJECT_NOTES=$(head -c 2000 "$EXO_DIR/per-project/${PROJECT_NAME}.md")
+if [ -n "$PROJECT_NAME" ] && [ -d "$EXO_DIR/per-project/${PROJECT_NAME}" ]; then
+    PROJECT_NOTES=$(uv run python -c "
+import os, glob
+notes_dir = os.path.expanduser('$EXO_DIR/per-project/$PROJECT_NAME')
+files = sorted(glob.glob(os.path.join(notes_dir, '*.md')), key=os.path.getmtime, reverse=True)
+parts = []
+total = 0
+max_chars = 3000
+for fp in files[:5]:
+    with open(fp) as f:
+        text = f.read().strip()
+    if not text:
+        continue
+    if total + len(text) > max_chars:
+        remaining = max_chars - total
+        if remaining > 100:
+            parts.append(text[:remaining] + '...')
+        break
+    parts.append(text)
+    total += len(text)
+print('\n\n---\n\n'.join(parts))
+" 2>/dev/null)
 fi
 
 # Detect Claude Code auto-memory for this project

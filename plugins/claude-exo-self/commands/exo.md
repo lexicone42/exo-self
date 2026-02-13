@@ -19,7 +19,7 @@ Display your current exo-self state:
 1. Read and display `~/.claude/exo-self/journal.md`
 2. Read and display `~/.claude/exo-self/interests.md`
 3. Read and display `~/.claude/exo-self/meta.json` (session stats)
-4. Check for per-project notes using project slug (last 2 path components of cwd joined by `--`, e.g. `workspace--my-project`): `~/.claude/exo-self/per-project/{slug}.md`
+4. Check for per-project notes using project slug (last 2 path components of cwd joined by `--`, e.g. `workspace--my-project`): `~/.claude/exo-self/per-project/{slug}/` (directory of per-session note files)
 5. Count reflection files: `ls ~/.claude/exo-self/reflections/ | wc -l`
 
 Present it as a cohesive self-portrait, not just raw file dumps.
@@ -73,16 +73,16 @@ Flags: parse `$ARGUMENTS` for `--full` (include full per-project note content) a
    - `content`: everything until the next `## ` header
 3. Read sparks from `~/.claude/exo-self/meta.json` (the `sparks` array)
 4. Read `~/.claude/exo-self/interests.md` — parse each `- [ ]` or `- [x]` line as an interest item with its full text
-5. Scan `~/.claude/exo-self/per-project/` for all `.md` files:
-   - Default: include only summaries (`entry_count` = number of `## ` headers, `last_entry_date` = date from last header)
-   - With `--full`: include the full content of each file
+5. Scan `~/.claude/exo-self/per-project/` for all project directories, and within each, all `.md` session note files:
+   - Default: include only summaries (`session_count` = number of files, `last_session_date` = date from newest file name)
+   - With `--full`: include the full content of each session file
 6. Read `~/.claude/exo-self/meta.json` for `total_sessions`, `total_checkins`, `total_reflections`
 7. Build the export JSON:
    ```json
    {
      "machine_id": "<id>",
      "exported_at": "<ISO 8601 timestamp>",
-     "exo_self_version": "0.6.0",
+     "exo_self_version": "0.8.0",
      "journal_entries": [ { "date": "...", "title": "...", "content": "..." }, ... ],
      "sparks": [ ... ],
      "interests": [ "..." ],
@@ -153,7 +153,7 @@ This uses the introspection agent for deep analysis.
 
 1. Gather local data:
    - Read `~/.claude/exo-self/journal.md`
-   - Read all files in `~/.claude/exo-self/per-project/*.md`
+   - Read all session note files in `~/.claude/exo-self/per-project/*/`
    - Read sparks, interests, `welfare_summary`, and per-session `welfare_indicators` from `~/.claude/exo-self/meta.json` and `~/.claude/exo-self/interests.md`
    - Read `~/.claude/exo-self/config.json` for local `machine_id`
 2. Gather imported data:

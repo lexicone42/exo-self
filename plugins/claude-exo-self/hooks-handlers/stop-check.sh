@@ -53,37 +53,23 @@ checkin_fired = state.get('checkin_fired', False)
 project_slug = state.get('project_slug', '')
 
 # --- Bookkeeping BEFORE early-exit guards ---
-# Detect wrote_notes via mtime
+# Detect wrote_notes: check session-specific notes file, then journal mtime
 wrote_notes = False
-if os.path.exists(journal_path) and session_start > 0:
+
+# Per-session notes file: if it exists and has content, notes were written
+session_notes_path = state.get('session_notes_path', '')
+if session_notes_path and os.path.exists(session_notes_path):
+    try:
+        wrote_notes = os.path.getsize(session_notes_path) > 0
+    except OSError:
+        pass
+
+# Journal mtime fallback
+if not wrote_notes and os.path.exists(journal_path) and session_start > 0:
     try:
         wrote_notes = os.path.getmtime(journal_path) > session_start
     except OSError:
         pass
-
-proj_path = ''
-if not wrote_notes and session_start > 0 and project_slug:
-    proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-    if os.path.exists(proj_path):
-        try:
-            wrote_notes = os.path.getmtime(proj_path) > session_start
-        except OSError:
-            pass
-
-# Content-based fallback: check for check-in markers in NEW content only
-if not wrote_notes and session_start > 0 and project_slug:
-    if not proj_path:
-        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-    if os.path.exists(proj_path):
-        try:
-            start_size = state.get('per_project_filesize', 0)
-            with open(proj_path) as f:
-                f.seek(start_size)
-                new_content = f.read()
-            if new_content and ('**Friction**' in new_content or '### Check-in' in new_content or '**Spark**' in new_content):
-                wrote_notes = True
-        except Exception:
-            pass
 
 # Update checkin_responded BEFORE guards — this is the key fix
 if wrote_notes and checkin_fired and not state.get('checkin_responded'):
@@ -147,7 +133,7 @@ else:
     state['stop_reminded'] = True
     state['last_stop_time'] = time.time()
 
-    target = f'per-project/{project_slug}.md' if project_slug else 'journal.md'
+    target = f'per-project/{project_slug}/' if project_slug else 'journal.md'
     reason = f'Exo-self: ~{int(duration_min)} min session'
     if failures >= 3:
         top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else 'tools'

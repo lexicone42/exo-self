@@ -23,8 +23,8 @@ Read the following files:
 Use Glob to find all reflection files:
 - Pattern: `~/.claude/exo-self/reflections/*.md`
 
-Use Glob to find all per-project notes:
-- Pattern: `~/.claude/exo-self/per-project/*.md`
+Use Glob to find all per-project session notes:
+- Pattern: `~/.claude/exo-self/per-project/*/*.md`
 
 Read all found files.
 

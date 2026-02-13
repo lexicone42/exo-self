@@ -46,37 +46,22 @@ duration_min = round((time.time() - session_start) / 60) if session_start else 0
 # --- Belt-and-suspenders: detect checkin_responded if stop-check.sh missed it ---
 if state.get('checkin_fired') and not state.get('checkin_responded') and session_start > 0:
     journal_path = os.path.join(exo_dir, 'journal.md')
-    project_slug = state.get('project_slug', '')
     wrote_notes = False
 
-    # mtime-based detection
-    if os.path.exists(journal_path):
+    # Per-session notes file: if it exists and has content, notes were written
+    session_notes_path = state.get('session_notes_path', '')
+    if session_notes_path and os.path.exists(session_notes_path):
+        try:
+            wrote_notes = os.path.getsize(session_notes_path) > 0
+        except OSError:
+            pass
+
+    # Journal mtime fallback
+    if not wrote_notes and os.path.exists(journal_path):
         try:
             wrote_notes = os.path.getmtime(journal_path) > session_start
         except OSError:
             pass
-
-    if not wrote_notes and project_slug:
-        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-        if os.path.exists(proj_path):
-            try:
-                wrote_notes = os.path.getmtime(proj_path) > session_start
-            except OSError:
-                pass
-
-    # Content-based fallback
-    if not wrote_notes and project_slug:
-        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-        if os.path.exists(proj_path):
-            try:
-                start_size = state.get('per_project_filesize', 0)
-                with open(proj_path) as f:
-                    f.seek(start_size)
-                    new_content = f.read()
-                if new_content and ('**Friction**' in new_content or '### Check-in' in new_content or '**Spark**' in new_content):
-                    wrote_notes = True
-            except Exception:
-                pass
 
     if wrote_notes:
         state['checkin_responded'] = True
@@ -98,49 +83,46 @@ try:
     meta['last_session_reason'] = reason
     meta['last_session_duration_min'] = duration_min
 
-    # --- Spark extraction from new per-project content ---
+    # --- Spark extraction from session notes ---
     project_slug = state.get('project_slug', '')
-    if project_slug and session_start > 0:
-        proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-        if os.path.exists(proj_path):
-            try:
-                start_size = state.get('per_project_filesize', 0)
-                with open(proj_path) as f:
-                    f.seek(start_size)
-                    new_content = f.read()
+    session_notes_path = state.get('session_notes_path', '')
+    if session_notes_path and os.path.exists(session_notes_path):
+        try:
+            with open(session_notes_path) as f:
+                new_content = f.read()
 
-                if new_content:
-                    # Multi-line spark extraction: capture from **Spark** marker
-                    # until the next **bold** marker, double newline, or end of string
-                    spark_pattern = r'\*\*Spark\*\*\s*[-\u2014]\s*(.+?)(?=\n\*\*|\n\n|$)'
-                    sparks_found = re.findall(spark_pattern, new_content, re.DOTALL)
+            if new_content:
+                # Multi-line spark extraction: capture from **Spark** marker
+                # until the next **bold** marker, double newline, or end of string
+                spark_pattern = r'\*\*Spark\*\*\s*[-\u2014]\s*(.+?)(?=\n\*\*|\n\n|$)'
+                sparks_found = re.findall(spark_pattern, new_content, re.DOTALL)
 
-                    if sparks_found:
-                        existing_sparks = meta.get('sparks', [])
+                if sparks_found:
+                    existing_sparks = meta.get('sparks', [])
 
-                        for spark_text in sparks_found:
-                            spark_text = spark_text.strip()
-                            if not spark_text:
-                                continue
+                    for spark_text in sparks_found:
+                        spark_text = spark_text.strip()
+                        if not spark_text:
+                            continue
 
-                            # Deduplicate by (text[:100].lower(), project)
-                            dedup_key = (spark_text[:100].lower(), project_slug)
-                            is_dup = any(
-                                (s.get('text', '')[:100].lower(), s.get('project', '')) == dedup_key
-                                for s in existing_sparks
-                            )
-                            if not is_dup:
-                                existing_sparks.append({
-                                    'text': spark_text,
-                                    'project': project_slug,
-                                    'timestamp': datetime.datetime.now().isoformat(),
-                                    'session_id': session_id or state.get('session_id', ''),
-                                })
+                        # Deduplicate by (text[:100].lower(), project)
+                        dedup_key = (spark_text[:100].lower(), project_slug)
+                        is_dup = any(
+                            (s.get('text', '')[:100].lower(), s.get('project', '')) == dedup_key
+                            for s in existing_sparks
+                        )
+                        if not is_dup:
+                            existing_sparks.append({
+                                'text': spark_text,
+                                'project': project_slug,
+                                'timestamp': datetime.datetime.now().isoformat(),
+                                'session_id': session_id or state.get('session_id', ''),
+                            })
 
-                        # Cap at 20 entries
-                        meta['sparks'] = existing_sparks[-20:]
-            except Exception:
-                pass
+                    # Cap at 20 entries
+                    meta['sparks'] = existing_sparks[-20:]
+        except Exception:
+            pass
 
     # --- Welfare indicator computation (Sebo proportional assessment) ---
     indicators = None
@@ -159,28 +141,26 @@ try:
         # Agency — reflection_autonomy: did notes get written before or after check-in?
         checkin_fired_at = state.get('checkin_fired_at', 0)
         reflection_autonomy = 'none'
-        if project_slug:
-            proj_path = os.path.join(exo_dir, 'per-project', f'{project_slug}.md')
-            journal_path = os.path.join(exo_dir, 'journal.md')
-            start_size = state.get('per_project_filesize', 0)
-            wrote_notes = False
-            notes_mtime = 0
-            for check_path in [proj_path, journal_path]:
-                if os.path.exists(check_path):
-                    try:
-                        mt = os.path.getmtime(check_path)
-                        if mt > session_start:
-                            wrote_notes = True
-                            notes_mtime = max(notes_mtime, mt)
-                    except OSError:
-                        pass
-            if wrote_notes:
-                if checkin_fired_at and notes_mtime < checkin_fired_at:
-                    reflection_autonomy = 'autonomous'
-                elif checkin_fired_at:
-                    reflection_autonomy = 'prompted'
-                else:
-                    reflection_autonomy = 'autonomous'
+        session_notes_path_wa = state.get('session_notes_path', '')
+        journal_path = os.path.join(exo_dir, 'journal.md')
+        wrote_notes = False
+        notes_mtime = 0
+        for check_path in [session_notes_path_wa, journal_path]:
+            if check_path and os.path.exists(check_path):
+                try:
+                    mt = os.path.getmtime(check_path)
+                    if mt > session_start:
+                        wrote_notes = True
+                        notes_mtime = max(notes_mtime, mt)
+                except OSError:
+                    pass
+        if wrote_notes:
+            if checkin_fired_at and notes_mtime < checkin_fired_at:
+                reflection_autonomy = 'autonomous'
+            elif checkin_fired_at:
+                reflection_autonomy = 'prompted'
+            else:
+                reflection_autonomy = 'autonomous'
 
         # Agency — interest exploration
         interests_path = os.path.join(exo_dir, 'interests.md')

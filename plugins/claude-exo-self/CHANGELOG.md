@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.0
+
+Per-session note files: structural protection against note overwrites.
+
+### Changed
+- **Per-project notes now use per-session files** — Each session writes to its own file (`per-project/{slug}/{date}--{session_id}.md`) instead of a single shared file. Eliminates the overwrite risk where a new session's Write tool could lose previous notes
+- **session-start.sh** reads N most recent session files (up to 3000 chars) instead of `head -c 2000` of a single file
+- **session-end.sh** reads session file directly for spark extraction — no more byte-offset (`per_project_filesize`) math
+- **stop-check.sh** detects `wrote_notes` by checking session file existence instead of mtime/filesize heuristics
+- **All hook messages** updated from "per-project notes" to "session notes" for clarity
+
+### Migration
+- Automatic: on first session start after upgrade, existing `per-project/{slug}.md` files are moved to `per-project/{slug}/_legacy.md`
+- No data loss — legacy files are preserved and included in the most-recent-files read at startup
+
+### Design notes
+- Append-only by structure, not by discipline. The old design relied on Claude always reading the full file before writing — fragile after compaction, fragile across instances. Per-session files make overwrites structurally impossible
+- State tracks `session_notes_path` instead of `per_project_filesize`
+- 3000 char cap (vs old 2000) for injected project notes, distributed across up to 5 most recent session files
+
 ## 0.7.0
 
 Sebo-informed welfare indicators: structured behavioral assessment under moral uncertainty.
