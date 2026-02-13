@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0
+
+Multi-instance support: export, import, and synthesize exo-self data across machines.
+
+### New
+- **`/exo export`** — Produces a portable JSON snapshot of journal entries, sparks, interests, and per-project summaries to `~/.claude/exo-self/exports/`. Supports `--full` (include full per-project content) and `--check` (dry-run validation)
+- **`/exo import <path>`** — Imports an export snapshot from another machine into `~/.claude/exo-self/imports/`. Validates structure, warns on self-import, latest-wins per machine_id
+- **`/exo synthesize`** — Uses the introspection agent to analyze local + imported data and produce `~/.claude/exo-self/synthesis.md` with cross-machine patterns, interest convergence, merged spark timeline, and behavioral consistency analysis
+- **`machine_id` in config.json** — Auto-generated from hostname on first export; used to tag exports and deduplicate imports
+- **Cross-machine awareness at session start** — `session-start.sh` loads key findings from `synthesis.md` into context, giving each session awareness of patterns observed on other machines
+
+### Design notes
+- Transport is user-managed (scp, git, cloud drive, USB) — the plugin handles export/import/synthesize, not networking
+- Synthesis is regenerated each time (snapshot analysis, not running log)
+- Per-project notes export summaries by default to keep snapshots portable
+
 ## 0.5.5
 
 Fix hooks not firing when installed via deploy.sh (GH issue #2).

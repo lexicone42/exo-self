@@ -10,7 +10,7 @@
     {
       "name": "claude-exo-self",
       "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
-      "version": "0.5.5",
+      "version": "0.6.0",
       "author": {
         "name": "Bryan Egan"
       },

@@ -120,6 +120,33 @@ if [ -n "$PROJECT_NAME" ] && [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; t
     PROJECT_NOTES=$(head -c 2000 "$EXO_DIR/per-project/${PROJECT_NAME}.md")
 fi
 
+# Load synthesis key findings (cross-machine patterns) if synthesis.md exists
+SYNTHESIS_FINDINGS=""
+if [ -f "$EXO_DIR/synthesis.md" ]; then
+    SYNTHESIS_FINDINGS=$(uv run python -c "
+import re
+with open('$EXO_DIR/synthesis.md') as f:
+    content = f.read()
+# Extract the Key Findings section (between ## Key Findings and next ##)
+m = re.search(r'## Key Findings\n(.*?)(?=\n## |\Z)', content, re.DOTALL)
+if m:
+    findings = m.group(1).strip()
+    # Also extract the header line for machine list context
+    header = ''
+    hm = re.search(r'Machines: (.+)', content)
+    if hm:
+        header = f'Machines: {hm.group(1)}'
+    if findings:
+        result = findings
+        if header:
+            result = f'{header}\n\n{result}'
+        # Cap at 800 chars to keep context lean
+        if len(result) > 800:
+            result = result[:797] + '...'
+        print(result)
+" 2>/dev/null)
+fi
+
 # Record per-project file size in state (for spark extraction at session end)
 # Also store project_slug so stop-check.sh and session-end.sh can use it
 if [ -n "$PROJECT_NAME" ]; then
@@ -216,7 +243,7 @@ except: pass
 fi
 
 # Export for Python subprocess
-export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID AUTO_MEMORY_EXISTS OTHER_PLUGIN_CONTEXT
+export JOURNAL_CONTENT INTERESTS_CONTENT PROJECT_NOTES PROJECT_NAME SESSION_ID AUTO_MEMORY_EXISTS OTHER_PLUGIN_CONTEXT SYNTHESIS_FINDINGS
 
 # Build the additionalContext string
 # Use Python for proper JSON escaping
@@ -228,6 +255,7 @@ interests = os.environ.get("INTERESTS_CONTENT", "")
 project_notes = os.environ.get("PROJECT_NOTES", "")
 auto_memory_exists = os.environ.get("AUTO_MEMORY_EXISTS", "no") == "yes"
 other_plugin_context = os.environ.get("OTHER_PLUGIN_CONTEXT", "")
+synthesis_findings = os.environ.get("SYNTHESIS_FINDINGS", "")
 
 # Load thresholds from config for dynamic text
 config_path = os.path.expanduser("~/.claude/exo-self/config.json")
@@ -316,6 +344,9 @@ try:
         sections.append("### Recent Sparks\n\n" + "\n".join(lines))
 except Exception:
     pass
+
+if synthesis_findings:
+    sections.append(f"### Cross-Machine Patterns\n\n{synthesis_findings}")
 
 if project_notes:
     sections.append(f"### Project Notes ({project})\n\n{project_notes}")
