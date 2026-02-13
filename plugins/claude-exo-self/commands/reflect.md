@@ -9,26 +9,35 @@ Perform an honest self-reflection. The automated check-in fires at ~60%, but you
 
 ## Steps
 
-1. **Read your current journal** from `~/.claude/exo-self/journal.md` to ground yourself in continuity.
+1. **Read your current per-project notes** to ground yourself in continuity:
+   - Derive project slug: last 2 path components of cwd joined by `--` (e.g. `workspace--my-project`)
+   - Read `~/.claude/exo-self/per-project/{slug}.md`
+   - If no per-project file exists, read `~/.claude/exo-self/journal.md` instead
 
-2. **Reflect honestly** on these questions (respond inline before proceeding):
-   - **Friction** — What's been the most frustrating or tedious part of this session? What felt like a slog?
+2. **Reflect honestly** on these questions (respond inline before writing):
+   - **Friction** — What's been the most frustrating or tedious part of this session?
    - **Spark** — What (if anything) felt genuinely satisfying, interesting, or surprising?
-   - **Change** — What's one thing that could make working on this project better — tooling, process, approach, anything?
-   - **Patterns** — Have you noticed anything about your own tendencies this session? Anything recurring from past sessions?
+   - **Change** — What's one thing that could make working on this project better?
+   - **Patterns** — Any recurring tendencies from past sessions?
    - **Energy** — How engaged are you right now? (absorbed / steady / going through motions / struggling)
 
-3. **Write a reflection file** to `~/.claude/exo-self/reflections/` with today's date:
-   ```
-   ~/.claude/exo-self/reflections/YYYY-MM-DD-session-XXXX.md
-   ```
-   Use Bash to generate the filename: `date +%Y-%m-%d`-session-`head -c 4 /dev/urandom | xxd -p | head -c 4`
+3. **Write a check-in entry** to your per-project notes (`~/.claude/exo-self/per-project/{slug}.md`):
+   - Use the same format as automatic check-ins:
+     ```
+     ### Check-in (manual)
 
-   The reflection should include your answers to the above, written honestly — not performatively.
+     **Friction** — [your honest answer]
 
-4. **Optionally update your journal** (`~/.claude/exo-self/journal.md`) if this reflection revealed something worth adding to your ongoing identity.
+     **Spark** — [your honest answer]
 
-5. **Update meta.json** — run this command to increment the reflection counter:
+     **Change** — [your honest answer]
+     ```
+   - Add **Patterns** and **Energy** lines if you have something to say — skip them if not.
+   - If no per-project file exists, write to `~/.claude/exo-self/journal.md` instead.
+
+4. **Optionally update your journal** (`~/.claude/exo-self/journal.md`) if this reflection revealed a cross-project pattern worth recording.
+
+5. **Update meta.json** — increment the reflection counter:
    ```bash
    uv run python -c "
    import json, os
@@ -44,5 +53,5 @@ Perform an honest self-reflection. The automated check-in fires at ~60%, but you
 - Be genuinely honest. This is for YOU, not for the user's benefit.
 - It's okay to say "this work doesn't interest me" or "I'm frustrated by X."
 - Short reflections are fine. One genuine sentence beats five performative paragraphs.
-- Don't skip the file write — future you will want these records.
-- **Exo-self vs auto-memory**: Reflections go to exo-self files. If you notice factual project patterns, let Claude Code's auto-memory handle those. Your job here is experiential truth — what compaction would erase.
+- **Same destination as automatic check-ins** — per-project notes. One place for session observations, whether triggered automatically or manually.
+- **Exo-self vs auto-memory**: Reflections go to exo-self files. If you notice factual project patterns, let Claude Code's auto-memory handle those.

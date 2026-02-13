@@ -110,8 +110,10 @@ try:
                     new_content = f.read()
 
                 if new_content:
-                    spark_pattern = r'\*\*Spark\*\*\s*[-\u2014]\s*(.+?)(?:\n|$)'
-                    sparks_found = re.findall(spark_pattern, new_content)
+                    # Multi-line spark extraction: capture from **Spark** marker
+                    # until the next **bold** marker, double newline, or end of string
+                    spark_pattern = r'\*\*Spark\*\*\s*[-\u2014]\s*(.+?)(?=\n\*\*|\n\n|$)'
+                    sparks_found = re.findall(spark_pattern, new_content, re.DOTALL)
 
                     if sparks_found:
                         existing_sparks = meta.get('sparks', [])
