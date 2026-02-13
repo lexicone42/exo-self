@@ -154,7 +154,7 @@ def nudge_msg(state=None):
         top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else "tools"
         return (f"Exo-self ~40%: {failures} tool failures ({top_tool}) — "
             f"worth a sentence in per-project notes if it's frustrating.")
-    return "Exo-self ~40%: anything frustrating or satisfying? A sentence to per-project notes if so."
+    return "Exo-self ~40%: anything frustrating, satisfying, or curious? Explore an interest, note a spark, or just think out loud."
 
 
 def checkin_survey(usage_pct, project_name="", state=None):
