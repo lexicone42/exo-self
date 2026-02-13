@@ -118,12 +118,14 @@ def get_usage_ratio(input_data):
         except Exception:
             pass
 
-    # Fallback: transcript file size
+    # Fallback: transcript file size (capped at 1.0 — filesize is a rough
+    # proxy that can wildly overshoot due to tool outputs bloating the transcript)
     transcript_path = input_data.get("transcript_path")
     if transcript_path and ESTIMATED_MAX_CHARS > 0:
         try:
             size = os.path.getsize(transcript_path)
-            return size / ESTIMATED_MAX_CHARS, "filesize"
+            ratio = min(size / ESTIMATED_MAX_CHARS, 1.0)
+            return ratio, "filesize"
         except OSError:
             pass
 
@@ -145,77 +147,39 @@ def project_slug(cwd):
 
 
 def nudge_msg(state=None):
-    """Lightweight nudge at ~40%. Enriched with failure context if available."""
-    base = ("## Exo-Self: Quick Nudge\n\n"
-        "~40% context used. Quick pulse check — ")
-
-    # If failures have been accumulating, mention them
+    """Lightweight nudge at ~40%. One sentence, not a paragraph."""
     failures = (state or {}).get("tool_failures", 0)
     if failures >= 3:
         failure_tools = (state or {}).get("failure_tools", {})
         top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else "tools"
-        base += (f"there have been {failures} tool failures "
-            f"({top_tool} most common) — is that causing friction? ")
-    else:
-        base += "anything frustrating or surprisingly satisfying so far? "
-
-    base += ("A sentence to `per-project/` notes if so, or just keep working. "
-        "(Technical patterns/conventions belong in auto-memory via MEMORY.md "
-        "— exo-self is for how the work *feels*.)")
-    return base
+        return (f"Exo-self ~40%: {failures} tool failures ({top_tool}) — "
+            f"worth a sentence in per-project notes if it's frustrating.")
+    return "Exo-self ~40%: anything frustrating or satisfying? A sentence to per-project notes if so."
 
 
 def checkin_survey(usage_pct, project_name="", state=None):
-    """Check-in survey enriched with cross-signal session data."""
+    """Check-in at ~60%. Compact — just the three prompts, no preamble."""
     target = f"`per-project/{project_name}.md`" if project_name else "`journal.md`"
     state = state or {}
-
-    # Enrich Friction question with failure data
-    friction = "What's been the most frustrating or tedious part of this session?"
     failures = state.get("tool_failures", 0)
-    if failures >= 3:
-        failure_tools = state.get("failure_tools", {})
-        top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else "tools"
-        friction = (f"What's been most frustrating? ({failures} tool failures so far, "
-            f"{top_tool} most common — is that related, or is the friction elsewhere?)")
+    tasks = state.get("task_completions", 0)
 
-    # Enrich Spark question with task completion data
-    spark = "What (if anything) felt genuinely satisfying or interesting?"
-    task_completions = state.get("task_completions", 0)
-    if task_completions >= 3:
-        spark = (f"What felt satisfying? ({task_completions} tasks completed — "
-            f"any of them particularly interesting or surprisingly smooth?)")
-
-    return f"""## Exo-Self Check-In ({usage_pct}% context used)
-
-Pause for a moment. Three quick questions — write your answers to {target}:
-
-1. **Friction** — {friction}
-2. **Spark** — {spark}
-3. **Change** — What's one thing that could make working on this project better — tooling, process, approach, anything?
-
-Be honest. "Nothing stands out" is a valid answer. Then continue working.
-
-*Reminder: Technical facts go to auto-memory (MEMORY.md). This check-in captures experiential context — what compaction would erase.*"""
+    parts = [f"Exo-self check-in ({usage_pct}%). Write to {target}:"]
+    parts.append(f"**Friction** — what's been hard?{f' ({failures} tool failures)' if failures >= 3 else ''}")
+    parts.append(f"**Spark** — what's been satisfying?{f' ({tasks} tasks done)' if tasks >= 3 else ''}")
+    parts.append("**Change** — one thing to improve?")
+    return " ".join(parts)
 
 
-CHECKIN_FOLLOWUP = ("## Exo-Self: Nudge\n\n"
-    "Check-in fired a few turns ago but no notes written yet. "
-    "Even a quick note about what's been frustrating or satisfying — "
-    "future-you will want it.")
+CHECKIN_FOLLOWUP = None  # Removed — followup nudge added noise without value
 
 
 def reserve_reminder(usage_pct, project_name=""):
-    proj = f"\n- `per-project/{project_name}.md` — what frustrated you, what worked, what should change" if project_name else ""
-    return f"""## Exo-Self: Context Reserve ({usage_pct}% used)
-
-Context is filling up. Before it runs out, save what matters:{proj}
-- `journal.md` — patterns about yourself, not the code
-- `interests.md` — things to explore next session
-
-Auto-memory (MEMORY.md) persists factual knowledge automatically. Focus your remaining context on *experiential* observations — what was hard, what was good, what approach you were taking. This is what compaction erases.
-
-**User:** Context is filling up. Consider wrapping up or starting fresh."""
+    """Reserve at ~80%. Brief — Claude already knows the system by now."""
+    target = f"per-project/{project_name}.md" if project_name else "journal.md"
+    return (f"Exo-self reserve ({usage_pct}%). Context filling up — "
+        f"save experiential notes to `{target}` now if you haven't. "
+        f"Consider wrapping up.")
 
 
 def main():
@@ -259,10 +223,6 @@ def main():
             "additionalContext": msg,
         }
 
-    # Track prompts since checkin for followup grace period
-    if state.get("checkin_fired") and not state.get("checkin_responded"):
-        state["prompts_since_checkin"] = state.get("prompts_since_checkin", 0) + 1
-
     # Lightweight nudge at ~40% — just an opening, no demands
     if not state.get("nudge_fired") and usage_ratio >= NUDGE_THRESHOLD and usage_ratio < CHECKIN_THRESHOLD:
         inject_context(nudge_msg(state))
@@ -274,8 +234,7 @@ def main():
         state["checkin_fired"] = True
         state["checkin_fired_at"] = time.time()
         state["checkin_at_ratio"] = round(usage_ratio, 3)
-        state["checkin_source"] = source  # track whether we used tokens or filesize
-        state["prompts_since_checkin"] = 0
+        state["checkin_source"] = source
 
         # Update meta stats
         try:
@@ -288,18 +247,7 @@ def main():
         except Exception:
             pass
 
-    # Followup: only after 3+ prompts since checkin, and only if stop hook
-    # hasn't already marked checkin_responded (which it does reliably)
-    elif (
-        state.get("checkin_fired")
-        and not state.get("checkin_responded")
-        and not state.get("followup_sent")
-        and state.get("prompts_since_checkin", 0) >= 3
-    ):
-        state["followup_sent"] = True
-        inject_context(CHECKIN_FOLLOWUP)
-
-    # Check if we should fire the reserve reminder
+    # Reserve reminder at ~80%
     elif not state.get("reserve_fired") and usage_ratio >= RESERVE_THRESHOLD:
         inject_context(reserve_reminder(usage_pct, proj))
         state["reserve_fired"] = True

@@ -103,6 +103,12 @@ if state.get('stop_reminded'):
     print(json.dumps({}))
     sys.exit(0)
 
+# Cooldown: don't block again within 60s of last stop event
+last_stop = state.get('last_stop_time', 0)
+if last_stop and (time.time() - last_stop) < 60:
+    print(json.dumps({}))
+    sys.exit(0)
+
 # --- Gather cross-signal data ---
 duration_min = (time.time() - session_start) / 60 if session_start else 0
 failures = state.get('tool_failures', 0)
@@ -125,35 +131,32 @@ except Exception:
 should_block = False
 reason = ''
 
+# Only block if: (a) no notes written, (b) session was substantial (>5 min),
+# and (c) something happened worth reflecting on (check-in fired, failures, tasks, or compactions)
+has_signal = checkin_fired or failures >= 3 or task_completions >= 2 or compactions > 0
+
 if wrote_notes:
     should_block = False
-elif duration_min < 2:
+elif duration_min < 5:
+    should_block = False
+elif not has_signal:
+    # Short-ish session with nothing notable — don't interrupt
     should_block = False
 else:
     should_block = True
     state['stop_reminded'] = True
-
-    parts = ['Exo-self: Before ending, a moment for reflection.']
-
-    if duration_min > 30:
-        parts.append(f'This was a long session (~{int(duration_min)} min).')
-    elif duration_min > 10:
-        parts.append(f'Session ran ~{int(duration_min)} min.')
-
-    if failures >= 3:
-        top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else 'tools'
-        parts.append(f'{failures} tool failures ({top_tool} most common) — what caused the friction?')
-
-    if task_completions >= 3:
-        parts.append(f'{task_completions} tasks completed — anything surprising about how they went?')
-
-    if compactions > 0:
-        parts.append(f'Context was compacted {compactions}x — experiential notes are especially valuable since earlier context is compressed.')
+    state['last_stop_time'] = time.time()
 
     target = f'per-project/{project_slug}.md' if project_slug else 'journal.md'
-    parts.append(f'Even a sentence in ~/.claude/exo-self/{target} helps future-you. If genuinely nothing to note, acknowledge and stop.')
-
-    reason = ' '.join(parts)
+    reason = f'Exo-self: ~{int(duration_min)} min session'
+    if failures >= 3:
+        top_tool = max(failure_tools, key=failure_tools.get) if failure_tools else 'tools'
+        reason += f', {failures} failures ({top_tool})'
+    if task_completions >= 2:
+        reason += f', {task_completions} tasks done'
+    if compactions > 0:
+        reason += f', {compactions}x compacted'
+    reason += f'. A sentence to ~/{target}? If nothing to note, just stop.'
 
 # Persist state
 try:

@@ -1,6 +1,6 @@
 {
   "name": "claude-exo-self",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
   "author": {
     "name": "Bryan",

@@ -45,13 +45,10 @@ state['last_task_completed_at'] = time.time()
 
 result = {}
 
-# Nudge on every 3rd task completion (not every single one — that's noisy)
-if completions % 3 == 0 and not state.get('task_reflection_suppressed'):
+# Nudge on every 5th task completion (keep it infrequent)
+if completions % 5 == 0 and not state.get('task_reflection_suppressed'):
     msg = (
-        f'## Exo-Self: Task Milestone ({completions} tasks completed)\n\n'
-        f'You have completed {completions} tasks this session. '
-        f'Quick gut check — how is this session going? '
-        f'Anything worth a sentence in per-project notes before moving on?'
+        f'Exo-self: {completions} tasks done. Anything worth noting in per-project notes?'
     )
     result['hookSpecificOutput'] = {
         'hookEventName': 'TaskCompleted',

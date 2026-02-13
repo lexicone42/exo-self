@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.2
+
+Reduce context pollution and fix stop hook behavior.
+
+### Fixed
+- **"Forgetting what it was doing"** — All hook injection messages compressed from multi-paragraph to 1-2 sentences. Total injection volume reduced ~75% (e.g. check-in survey: 800 chars → 180 chars)
+- **Stop hook double-firing** — Added 60-second cooldown between stop events. Raised minimum session duration from 2 → 5 minutes. Now requires a signal (check-in, failures, tasks, compaction) before blocking — no more blocking trivial sessions
+- **Filesize ratio 493% bug** — Capped transcript filesize fallback at 1.0 in `get_usage_ratio()`. Prevents reserve reminder firing at absurd ratios when tool outputs bloat the transcript
+- **checkin_responded always false** — `session-end.sh` now persists updated state to disk after detecting notes were written (was only updating in-memory, never written back)
+
+### Removed
+- **Followup nudge** — The 3-prompts-after-check-in nudge added noise without value. Removed entirely
+
+### Changed
+- Failure nudge threshold: 5 → 10 (pre-commit hook cycles were false positives)
+- Task milestone frequency: every 3rd → every 5th completion
+- Stop hook message: contextual one-liner instead of multi-sentence prompt
+
 ## 0.5.1
 
 Cross-platform fixes from fresh macOS install (GH issue #1).

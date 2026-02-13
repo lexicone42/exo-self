@@ -80,6 +80,12 @@ if state.get('checkin_fired') and not state.get('checkin_responded') and session
 
     if wrote_notes:
         state['checkin_responded'] = True
+        # Persist updated state so meta session_history reads the correct value
+        try:
+            with open(state_path, 'w') as f:
+                json.dump(state, f)
+        except Exception:
+            pass
 
 # Update meta
 try:

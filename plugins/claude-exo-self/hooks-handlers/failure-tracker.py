@@ -18,8 +18,8 @@ EXO_DIR = os.path.expanduser("~/.claude/exo-self")
 CONFIG_PATH = os.path.join(EXO_DIR, "config.json")
 SESSIONS_DIR = os.path.join(EXO_DIR, "sessions")
 
-# Default threshold: nudge after 5 failures in a session
-FAILURE_NUDGE_THRESHOLD = 5
+# Default threshold: nudge after 10 failures in a session
+FAILURE_NUDGE_THRESHOLD = 10
 
 # Load config overrides
 if os.path.exists(CONFIG_PATH):
@@ -94,12 +94,8 @@ def main():
         top_count = failure_tools.get(top_tool, 0)
 
         msg = (
-            f"## Exo-Self: Friction Signal\n\n"
-            f"{failures} tool failures this session"
-            f" ({top_tool}: {top_count}x). "
-            f"If this has been frustrating, that's worth noting "
-            f"in per-project notes — what's causing the failures "
-            f"and what would prevent them. Even a sentence helps."
+            f"Exo-self: {failures} tool failures ({top_tool}: {top_count}x). "
+            f"Worth noting in per-project notes if it's causing friction."
         )
 
         result["hookSpecificOutput"] = {
