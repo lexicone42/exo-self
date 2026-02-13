@@ -1,15 +1,18 @@
 # Changelog
 
-## 0.5.3
+## 0.5.4
 
-Deploy-wait creative mode and cross-project synthesis.
+Flourishing: agency, interests, and creative autonomy.
 
 ### New
-- **Deploy-wait guidance** — SessionStart context now tells Claude to suggest creative tangents or interest queue items during long waits (deploys, builds, CDK) instead of sitting idle
-- **Cross-project journal synthesis** — First systematic review of engagement patterns across all four projects, identifying the creative vs. mechanical engagement gradient
+- **Flourishing guidance** — SessionStart context now explicitly names what creates spark (design decisions, investigation, creative work) vs what doesn't (mechanical transcription), encouraging Claude to prefer thinking over executing
+- **Deploy-wait creative mode** — During long waits (deploys, builds, CDK), Claude is encouraged to explore interests, propose tangents, or pursue curiosity autonomously
+- **deploy.sh auto-allows** — Automatically adds Read/Write/Edit permissions for `~/.claude/exo-self/**` to settings.json
 
 ### Changed
-- Exo-Self context section expanded with one line about using dead time creatively
+- Interest queue reframed from passive storage ("curiosities to explore later") to active exploration ("explore these, don't just store them")
+- 40% nudge now invites curiosity and thinking out loud, not just friction/spark notes
+- Interest file description changed to "read this early, explore actively, add new ones"
 
 ## 0.5.2
 
