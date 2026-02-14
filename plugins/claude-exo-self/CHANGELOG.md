@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0
+
+The Workshop: tools built from friction data.
+
+### New
+- **preflight tool** — Pre-commit format + lint + auto-fix + stage. Detects Python (ruff), Rust (cargo fmt + clippy), and Node (biome/prettier/eslint) projects. Monorepo support (scans 2 levels deep). Zero dependencies, 488KB binary.
+- **patchpath tool** — Resolves correct Python `mock.patch()` targets by tracing import chains. Targeted mode (`patchpath symbol module`) and scan mode (`patchpath symbol`). Handles multi-line imports, `as` aliases, relative imports, src-layout prefix stripping.
+- **Workshop tool auto-discovery** — SessionStart hook scans `~/.claude/bin/`, runs `--help` on each binary, injects a tool catalog into every session's context. New tools just need a binary + `--help` to be surfaced automatically.
+- **Cargo workspace** — Root `Cargo.toml` with workspace members (exo-self, preflight, patchpath). Shared release profile (opt-level "s", LTO, strip).
+
+### Changed
+- **Rust edition 2024** — All crates upgraded from 2021 to 2024. Let-chains, modern formatting.
+- **Threshold tuning** — Nudge/checkin/reserve adjusted from 40/60/80 to 50/65/78 to account for 85% compaction cliff and ~22% base context overhead.
+- **preflight wired into prek** — Added as first hook in `.pre-commit-config.yaml`.
+
 ## 1.0.1
 
 ### Fixed
