@@ -261,6 +261,10 @@ if [ -f "$STATUSLINE_SRC" ]; then
     cp "$STATUSLINE_SRC" "$STATUSLINE_DST"
     chmod +x "$STATUSLINE_DST"
     echo "   -> $STATUSLINE_DST"
+    # statusline.sh uses $(dirname "$0")/bin/exo-self — symlink the binary
+    mkdir -p "$CLAUDE_DIR/bin"
+    ln -sf "$MARKETPLACE_PLUGIN_DIR/bin/exo-self" "$CLAUDE_DIR/bin/exo-self"
+    echo "   -> $CLAUDE_DIR/bin/exo-self -> $MARKETPLACE_PLUGIN_DIR/bin/exo-self"
 else
     echo "   -> statusline.sh not found in source, skipping."
 fi

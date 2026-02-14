@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+### Fixed
+- **Statusline broken after deploy** — `~/.claude/statusline.sh` resolved `$(dirname "$0")/bin/exo-self` to `~/.claude/bin/exo-self` which didn't exist. Deploy script now creates a symlink from `~/.claude/bin/exo-self` to the marketplace binary.
+
 ## 1.0.0
 
 Rewrite all hook handlers in Rust. Single 1.2MB binary replaces ~2000 lines of shell/Python.
