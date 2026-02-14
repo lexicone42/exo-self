@@ -51,29 +51,30 @@ pub fn run() {
 
     if !state.session_notes_path.is_empty()
         && let Ok(content) = std::fs::read_to_string(&state.session_notes_path)
-            && !content.is_empty() {
-                let (fm, prose) = markdown::parse_frontmatter(&content);
-                frontmatter = fm;
-                prose_content = prose;
+        && !content.is_empty()
+    {
+        let (fm, prose) = markdown::parse_frontmatter(&content);
+        frontmatter = fm;
+        prose_content = prose;
 
-                // Merge auto-computed fields
-                frontmatter.insert(
-                    "duration_min".into(),
-                    serde_yaml::Value::Number(duration_min.into()),
-                );
+        // Merge auto-computed fields
+        frontmatter.insert(
+            "duration_min".into(),
+            serde_yaml::Value::Number(duration_min.into()),
+        );
 
-                // Extract sparks from prose
-                sparks_found = markdown::extract_sparks(if prose_content.is_empty() {
-                    &content
-                } else {
-                    &prose_content
-                });
+        // Extract sparks from prose
+        sparks_found = markdown::extract_sparks(if prose_content.is_empty() {
+            &content
+        } else {
+            &prose_content
+        });
 
-                frontmatter.insert(
-                    "spark_count".into(),
-                    serde_yaml::Value::Number((sparks_found.len() as u64).into()),
-                );
-            }
+        frontmatter.insert(
+            "spark_count".into(),
+            serde_yaml::Value::Number((sparks_found.len() as u64).into()),
+        );
+    }
 
     // Add sparks to meta (deduplicated)
     if !sparks_found.is_empty() {
@@ -276,12 +277,13 @@ pub fn run() {
 
 fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
     if !state.session_notes_path.is_empty()
-        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
-            let (_, prose) = markdown::parse_frontmatter(&content);
-            if !prose.trim().is_empty() {
-                return true;
-            }
+        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path)
+    {
+        let (_, prose) = markdown::parse_frontmatter(&content);
+        if !prose.trim().is_empty() {
+            return true;
         }
+    }
     if session_start > 0.0 {
         return file_modified_after(&paths.journal, session_start);
     }
@@ -319,16 +321,17 @@ fn compute_reflection_autonomy(
         }
         let path = std::path::Path::new(check_path);
         if let Ok(meta) = std::fs::metadata(path)
-            && let Ok(modified) = meta.modified() {
-                let mt = modified
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs_f64();
-                if mt > session_start {
-                    wrote_notes = true;
-                    notes_mtime = notes_mtime.max(mt);
-                }
+            && let Ok(modified) = meta.modified()
+        {
+            let mt = modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64();
+            if mt > session_start {
+                wrote_notes = true;
+                notes_mtime = notes_mtime.max(mt);
             }
+        }
     }
 
     if wrote_notes {

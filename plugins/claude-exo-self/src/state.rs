@@ -126,17 +126,19 @@ impl SessionState {
         for entry in entries.flatten() {
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.starts_with("state-") && name.ends_with(".json")
-                    && let Ok(meta) = std::fs::metadata(&path)
-                        && let Ok(modified) = meta.modified() {
-                            let age = modified
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_secs_f64();
-                            if age < cutoff {
-                                let _ = std::fs::remove_file(&path);
-                            }
-                        }
+                && name.starts_with("state-")
+                && name.ends_with(".json")
+                && let Ok(meta) = std::fs::metadata(&path)
+                && let Ok(modified) = meta.modified()
+            {
+                let age = modified
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs_f64();
+                if age < cutoff {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
         }
     }
 }

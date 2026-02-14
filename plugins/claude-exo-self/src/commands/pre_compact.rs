@@ -140,9 +140,9 @@ fn extract_handoff_content(transcript_path: &str) -> String {
                                     .get("input")
                                     .and_then(|i| i.get("file_path"))
                                     .and_then(|p| p.as_str())
-                                {
-                                    files_modified.insert(fp.to_string());
-                                }
+                            {
+                                files_modified.insert(fp.to_string());
+                            }
                         }
                     }
                 }

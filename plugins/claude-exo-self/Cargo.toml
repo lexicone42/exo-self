@@ -17,8 +17,3 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 glob = "0.3"
 
-[profile.release]
-opt-level = "s"
-lto = true
-strip = true
-codegen-units = 1

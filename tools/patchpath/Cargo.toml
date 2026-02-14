@@ -1,0 +1,7 @@
+[package]
+name = "patchpath"
+version = "0.1.0"
+edition = "2024"
+description = "Resolve the correct mock.patch() target for a Python symbol"
+
+[dependencies]

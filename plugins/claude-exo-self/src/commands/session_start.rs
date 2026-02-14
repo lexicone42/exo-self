@@ -245,23 +245,24 @@ fn merge_plugin_contexts(cfg: &Config) -> String {
         let pattern = format!("{cache_dir}/*/{plugin_name}/*/hooks-handlers/session-start.sh");
         if let Ok(paths) = glob::glob(&pattern)
             && let Some(entry) = paths.flatten().next()
-                && let Ok(output) = std::process::Command::new("bash")
-                    .arg(&entry)
-                    .stdin(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .output()
-                    && let Ok(json_str) = String::from_utf8(output.stdout)
-                        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
-                            && let Some(ctx) = val
-                                .get("hookSpecificOutput")
-                                .and_then(|h| h.get("additionalContext"))
-                                .and_then(|c| c.as_str())
-                                && !ctx.is_empty() {
-                                    if !merged.is_empty() {
-                                        merged.push_str("\n\n");
-                                    }
-                                    merged.push_str(ctx);
-                                }
+            && let Ok(output) = std::process::Command::new("bash")
+                .arg(&entry)
+                .stdin(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output()
+            && let Ok(json_str) = String::from_utf8(output.stdout)
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
+            && let Some(ctx) = val
+                .get("hookSpecificOutput")
+                .and_then(|h| h.get("additionalContext"))
+                .and_then(|c| c.as_str())
+            && !ctx.is_empty()
+        {
+            if !merged.is_empty() {
+                merged.push_str("\n\n");
+            }
+            merged.push_str(ctx);
+        }
     }
 
     merged

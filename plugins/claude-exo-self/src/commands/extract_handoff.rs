@@ -81,9 +81,9 @@ fn extract(transcript_path: &str, max_chars: usize) -> String {
                                         .get("input")
                                         .and_then(|i| i.get("file_path"))
                                         .and_then(|p| p.as_str())
-                                    {
-                                        files_modified.insert(fp.to_string());
-                                    }
+                                {
+                                    files_modified.insert(fp.to_string());
+                                }
                             }
                             _ => {}
                         }

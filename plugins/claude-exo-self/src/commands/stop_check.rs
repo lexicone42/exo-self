@@ -105,29 +105,31 @@ fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64
     // Per-session notes file
     if !state.session_notes_path.is_empty()
         && let Ok(meta) = std::fs::metadata(&state.session_notes_path)
-            && meta.len() > 0 {
-                // Check if file has content beyond just frontmatter
-                if let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
-                    // Has content beyond frontmatter template
-                    let (_, prose) = crate::markdown::parse_frontmatter(&content);
-                    if !prose.trim().is_empty() {
-                        return true;
-                    }
-                }
+        && meta.len() > 0
+    {
+        // Check if file has content beyond just frontmatter
+        if let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
+            // Has content beyond frontmatter template
+            let (_, prose) = crate::markdown::parse_frontmatter(&content);
+            if !prose.trim().is_empty() {
+                return true;
             }
+        }
+    }
 
     // Journal mtime fallback
     if session_start > 0.0
         && let Ok(meta) = std::fs::metadata(&paths.journal)
-            && let Ok(modified) = meta.modified() {
-                let mtime = modified
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs_f64();
-                if mtime > session_start {
-                    return true;
-                }
-            }
+        && let Ok(modified) = meta.modified()
+    {
+        let mtime = modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+        if mtime > session_start {
+            return true;
+        }
+    }
 
     false
 }

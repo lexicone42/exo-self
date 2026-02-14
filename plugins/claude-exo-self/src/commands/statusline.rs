@@ -214,13 +214,15 @@ fn get_git_info(dir: &str) -> (String, String, String) {
         let ahead = run(&["rev-list", "--count", &format!("{upstream}..HEAD")]);
         let behind = run(&["rev-list", "--count", &format!("HEAD..{upstream}")]);
         if let Ok(n) = ahead.parse::<u64>()
-            && n > 0 {
-                write!(status, "↑{n}").unwrap();
-            }
+            && n > 0
+        {
+            write!(status, "↑{n}").unwrap();
+        }
         if let Ok(n) = behind.parse::<u64>()
-            && n > 0 {
-                write!(status, "↓{n}").unwrap();
-            }
+            && n > 0
+        {
+            write!(status, "↓{n}").unwrap();
+        }
     }
 
     (repo_name, branch, status)
