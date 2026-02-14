@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1
+
+Fix project identity for new projects.
+
+### Fixed
+- **Use hook input CWD instead of process CWD** — `session_start` and `post_compact` now use `input.cwd` from Claude Code's hook stdin JSON instead of `std::env::current_dir()`. This fixes project identity being wrong when the hook process's working directory doesn't match the project directory (e.g., new projects, non-standard launch paths). `context_monitor` and `teammate_idle` already had this pattern.
+- **Auto-memory detection uses hook CWD** — `auto_memory_dir_for()` accepts the hook input CWD, ensuring correct auto-memory path resolution regardless of hook process CWD.
+- **Portable setup.sh** — Replace `realpath` with `cd && pwd` pattern for macOS compatibility with pre-Catalina systems.
+
 ## 1.2.0
 
 Plan-mode guidance and tracking.

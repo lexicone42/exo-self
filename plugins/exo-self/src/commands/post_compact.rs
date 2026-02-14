@@ -12,7 +12,11 @@ pub fn run() {
     let cfg = Config::load(&paths.config);
 
     let session_id = &input.session_id;
-    let project_slug = project::slug_from_cwd();
+    let project_slug = if !input.cwd.is_empty() {
+        project::slug_from_path(&input.cwd)
+    } else {
+        project::slug_from_cwd()
+    };
 
     // Load journal (scaled)
     let max_chars = scaling::journal_chars(&cfg);
@@ -37,7 +41,10 @@ pub fn run() {
     };
 
     // Detect auto-memory
-    let auto_memory_exists = paths.auto_memory_dir().map(|d| d.is_dir()).unwrap_or(false);
+    let auto_memory_exists = paths
+        .auto_memory_dir_for(&input.cwd)
+        .map(|d| d.is_dir())
+        .unwrap_or(false);
 
     // Load session state
     let state = SessionState::load(&paths, session_id);

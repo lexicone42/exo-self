@@ -44,7 +44,7 @@ for CANDIDATE in \
     "$SCRIPT_DIR/target/release/exo-self" \
     "$SCRIPT_DIR/../../target/release/exo-self"; do
     if [ -f "$CANDIDATE" ]; then
-        BINARY="$(realpath "$CANDIDATE")"
+        BINARY="$(cd "$(dirname "$CANDIDATE")" && pwd)/$(basename "$CANDIDATE")"
         break
     fi
 done
@@ -66,7 +66,7 @@ LINK_TARGET="$SCRIPT_DIR/bin/exo-self"
 MKT_DIR=$(jq -r ".[\"$MARKETPLACE\"].installLocation // empty" "$KNOWN_MKT_JSON" 2>/dev/null || true)
 if [ -n "$MKT_DIR" ] && [ -d "$MKT_DIR/plugins/$PLUGIN_NAME" ]; then
     MKT_PLUGIN_DIR="$MKT_DIR/plugins/$PLUGIN_NAME"
-    if [ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$MKT_PLUGIN_DIR")" ]; then
+    if [ "$(cd "$SCRIPT_DIR" && pwd)" != "$(cd "$MKT_PLUGIN_DIR" && pwd)" ]; then
         mkdir -p "$MKT_PLUGIN_DIR/bin"
         cp "$SCRIPT_DIR/bin/exo-self" "$MKT_PLUGIN_DIR/bin/exo-self"
         echo "   -> marketplace clone"

@@ -46,10 +46,15 @@ impl ExoPaths {
         self.per_project_dir.join(slug)
     }
 
-    /// Auto-memory directory path for Claude Code's native memory system
-    pub fn auto_memory_dir(&self) -> Option<PathBuf> {
-        let cwd = std::env::current_dir().ok()?;
-        let slug = cwd.to_string_lossy().replace(['/', '_'], "-");
+    /// Auto-memory directory path for Claude Code's native memory system.
+    /// Pass the hook input's `cwd` when available; falls back to process CWD.
+    pub fn auto_memory_dir_for(&self, cwd: &str) -> Option<PathBuf> {
+        let dir_path = if !cwd.is_empty() {
+            PathBuf::from(cwd)
+        } else {
+            std::env::current_dir().ok()?
+        };
+        let slug = dir_path.to_string_lossy().replace(['/', '_'], "-");
         let home = std::env::var("HOME").ok()?;
         let dir = PathBuf::from(home)
             .join(".claude/projects")

@@ -25,9 +25,13 @@ pub fn run() {
     let mut state = SessionState::default();
     state.session_id = session_id.clone();
     state.session_start = state::now();
-    state.project_cwd = std::env::current_dir()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    state.project_cwd = if !input.cwd.is_empty() {
+        input.cwd.clone()
+    } else {
+        std::env::current_dir()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
     state.save_with_shared(&paths);
 
     // Clean up stale session state files
@@ -48,8 +52,12 @@ pub fn run() {
         .map(|c| markdown::unchecked_interests(&c, max_items))
         .unwrap_or_default();
 
-    // Derive project slug
-    let project_slug = project::slug_from_cwd();
+    // Derive project slug (prefer input.cwd from Claude Code over process CWD)
+    let project_slug = if !input.cwd.is_empty() {
+        project::slug_from_path(&input.cwd)
+    } else {
+        project::slug_from_cwd()
+    };
 
     // Per-session notes file
     let session_date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -103,7 +111,10 @@ pub fn run() {
     }
 
     // Detect auto-memory
-    let auto_memory_exists = paths.auto_memory_dir().map(|d| d.is_dir()).unwrap_or(false);
+    let auto_memory_exists = paths
+        .auto_memory_dir_for(&input.cwd)
+        .map(|d| d.is_dir())
+        .unwrap_or(false);
 
     // Update meta
     let mut meta = Meta::load(&paths.meta);
