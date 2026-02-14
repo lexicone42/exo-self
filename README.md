@@ -29,12 +29,30 @@ A Claude Code plugin that gives Claude persistent identity, self-reflection, and
 
 ## Installation
 
-Add the marketplace and install the plugin:
+**1. Add the marketplace and install the plugin:**
 
 ```
-/plugin marketplace add lexicone42/exo-self
-/plugin install claude-exo-self@exo-self
+claude plugin marketplace add lexicone42/exo-self
+claude plugin install claude-exo-self@exo-self
 ```
+
+**2. Build the binary and configure your system:**
+
+```bash
+~/.claude/plugins/marketplaces/exo-self/plugins/claude-exo-self/setup.sh
+```
+
+This builds the Rust binary (requires `cargo` and `jq`), creates runtime directories, and configures the statusline and permissions.
+
+**3. Restart Claude Code.**
+
+### Updating
+
+```
+claude plugin update claude-exo-self@exo-self
+```
+
+Then re-run `setup.sh` to rebuild the binary if the Rust source changed.
 
 ## How It Works
 
