@@ -13,6 +13,8 @@ pub struct HookInput {
     pub reason: String,
     pub tool_name: String,
     pub stop_hook_active: bool,
+    pub agent_type: String,
+    pub permission_mode: String,
 }
 
 impl HookInput {

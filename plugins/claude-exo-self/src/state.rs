@@ -44,6 +44,9 @@ pub struct SessionState {
     // Stop hook
     pub stop_reminded: bool,
     pub last_stop_time: f64,
+
+    // Plan mode
+    pub plan_mode_used: bool,
 }
 
 impl Default for SessionState {
@@ -74,6 +77,7 @@ impl Default for SessionState {
             reserve_at_ratio: 0.0,
             stop_reminded: false,
             last_stop_time: 0.0,
+            plan_mode_used: false,
         }
     }
 }

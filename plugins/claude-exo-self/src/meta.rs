@@ -28,6 +28,8 @@ pub struct SessionHistoryEntry {
     pub checkin_fired: bool,
     pub checkin_responded: bool,
     pub compactions: u32,
+    #[serde(default)]
+    pub plan_mode_used: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_types: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,6 +93,8 @@ pub struct WelfareSummary {
     pub dominant_friction_tool: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkin_response_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_mode_rate: Option<f64>,
 }
 
 impl Meta {

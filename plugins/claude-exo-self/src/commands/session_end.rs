@@ -215,6 +215,12 @@ pub fn run() {
 
         indicators = Some(wi);
 
+        // Plan mode flag
+        frontmatter.insert(
+            "plan_mode".into(),
+            serde_yaml::Value::Bool(state.plan_mode_used),
+        );
+
         // Re-write finalized frontmatter
         if !state.session_notes_path.is_empty() && !frontmatter.is_empty() {
             let finalized = markdown::render_frontmatter(&frontmatter, &prose_content);
@@ -240,6 +246,7 @@ pub fn run() {
         checkin_fired: state.checkin_fired,
         checkin_responded: state.checkin_responded,
         compactions: state.compactions,
+        plan_mode_used: state.plan_mode_used,
         task_types: None,
         welfare_indicators: None,
     };
@@ -540,6 +547,19 @@ fn compute_welfare_summary(meta: &mut Meta) {
         compaction_frequency: (compaction_freq * 100.0).round() / 100.0,
         dominant_friction_tool,
         checkin_response_rate: checkin_rate.map(|r| (r * 100.0).round() / 100.0),
+        plan_mode_rate: {
+            let total = meta.session_history.len();
+            if total > 0 {
+                let plan_count = meta
+                    .session_history
+                    .iter()
+                    .filter(|h| h.plan_mode_used)
+                    .count();
+                Some((plan_count as f64 / total as f64 * 100.0).round() / 100.0)
+            } else {
+                None
+            }
+        },
     });
 }
 
