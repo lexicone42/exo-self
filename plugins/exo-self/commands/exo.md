@@ -159,7 +159,7 @@ This uses the introspection agent for deep analysis.
 2. Gather imported data:
    - Read all `.json` files in `~/.claude/exo-self/imports/`
    - Parse each as an export snapshot
-3. Launch the `introspection-agent` via the Task tool with subagent_type `claude-exo-self:introspection-agent`. Provide it with a prompt that includes:
+3. Launch the `introspection-agent` via the Task tool with subagent_type `exo-self:introspection-agent`. Provide it with a prompt that includes:
    - All local journal entries, sparks, interests, and per-project notes
    - All imported data (with machine_id labels)
    - Instructions to produce a synthesis with these sections:

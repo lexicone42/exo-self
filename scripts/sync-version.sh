@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PLUGIN_NAME="claude-exo-self"
+PLUGIN_NAME="exo-self"
 CARGO_TOML="plugins/$PLUGIN_NAME/Cargo.toml"
 MARKETPLACE_JSON=".claude-plugin/marketplace.json"
 PLUGIN_JSON="plugins/$PLUGIN_NAME/.claude-plugin/plugin.json"

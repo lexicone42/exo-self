@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "plugins/claude-exo-self",
+    "plugins/exo-self",
     "tools/preflight",
     "tools/patchpath",
 ]

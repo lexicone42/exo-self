@@ -8,13 +8,13 @@
   },
   "plugins": [
     {
-      "name": "claude-exo-self",
+      "name": "exo-self",
       "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
       "version": "1.2.0",
       "author": {
         "name": "Bryan Egan"
       },
-      "source": "./plugins/claude-exo-self",
+      "source": "./plugins/exo-self",
       "category": "productivity",
       "license": "Apache-2.0",
       "homepage": "https://github.com/lexicone42/exo-self"

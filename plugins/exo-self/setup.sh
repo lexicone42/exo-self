@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# setup.sh — Post-install setup for claude-exo-self
+# setup.sh — Post-install setup for exo-self
 #
 # Run AFTER installing via native marketplace commands:
 #   claude plugin marketplace add lexicone42/exo-self
-#   claude plugin install claude-exo-self@exo-self
+#   claude plugin install exo-self@exo-self
 #
 # This script handles what the marketplace can't:
 #   - Build the Rust binary
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-PLUGIN_NAME="claude-exo-self"
+PLUGIN_NAME="exo-self"
 MARKETPLACE="exo-self"
 PLUGIN_KEY="${PLUGIN_NAME}@${MARKETPLACE}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,8 +37,24 @@ echo "=== exo-self setup ==="
 # --- 1. Build Rust binary ---
 echo "1. Building binary..."
 (cd "$SCRIPT_DIR" && cargo build --release --quiet 2>&1)
+
+# Cargo may output to a workspace-level target dir; find the binary
+BINARY=""
+for CANDIDATE in \
+    "$SCRIPT_DIR/target/release/exo-self" \
+    "$SCRIPT_DIR/../../target/release/exo-self"; do
+    if [ -f "$CANDIDATE" ]; then
+        BINARY="$(realpath "$CANDIDATE")"
+        break
+    fi
+done
+if [ -z "$BINARY" ]; then
+    echo "ERROR: Binary not found after build. Check cargo output."
+    exit 1
+fi
+
 mkdir -p "$SCRIPT_DIR/bin"
-cp "$SCRIPT_DIR/target/release/exo-self" "$SCRIPT_DIR/bin/exo-self"
+cp "$BINARY" "$SCRIPT_DIR/bin/exo-self"
 chmod +x "$SCRIPT_DIR/bin/exo-self"
 echo "   $(du -h "$SCRIPT_DIR/bin/exo-self" | cut -f1)"
 
@@ -108,11 +124,11 @@ NEEDED_ALLOWS=(
     "Read($EXO_DIR/**)"
     "Write($EXO_DIR/**)"
     "Edit($EXO_DIR/**)"
-    "Skill(claude-exo-self:context-budget)"
-    "Skill(claude-exo-self:exo)"
-    "Skill(claude-exo-self:interests)"
-    "Skill(claude-exo-self:reflect)"
-    "Skill(claude-exo-self:self-reflection)"
+    "Skill(exo-self:context-budget)"
+    "Skill(exo-self:exo)"
+    "Skill(exo-self:interests)"
+    "Skill(exo-self:reflect)"
+    "Skill(exo-self:self-reflection)"
 )
 
 ADDED=0
