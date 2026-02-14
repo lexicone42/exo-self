@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.0
+
+Rewrite all hook handlers in Rust. Single 1.2MB binary replaces ~2000 lines of shell/Python.
+
+### Changed
+- **Rust binary** — All 9 hook handlers + statusline rewritten as a single `exo-self` binary with clap subcommands. Eliminates `uv`, `python`, and `jq` as runtime dependencies.
+- **Hook latency** — From 200-500ms (bash + uv run python interpreter startup) to <5ms (native binary exec).
+- **Shell handlers** — All `.sh` files are now 2-line exec stubs that delegate to the Rust binary.
+- **deploy.sh** — Now runs `cargo build --release` instead of requiring `uv`. Prerequisites: `cargo`, `jq`, `git`.
+
+### Removed
+- `hooks-handlers/env.sh` — PATH setup for uv/python/jq, no longer needed
+- `hooks-handlers/context-monitor.py` (263 lines) — Replaced by `exo-self context-monitor`
+- `hooks-handlers/failure-tracker.py` (112 lines) — Replaced by `exo-self failure-tracker`
+- `hooks-handlers/extract-handoff.py` (99 lines) — Replaced by `exo-self extract-handoff`
+- `hooks-handlers/context-monitor-wrapper.sh` and `failure-tracker-wrapper.sh` — No longer needed (stubs call binary directly)
+
+### Technical
+- Single binary with `catch_unwind` — hooks never crash, always exit 0
+- All config fields have serde defaults — missing/malformed config.json is handled gracefully
+- Session state schema unchanged — backward compatible with existing state files
+- Context window scaling preserved — automatic limit adjustment for >200K token contexts
+- Welfare indicators, spark extraction, frontmatter parsing — all functionality preserved
+
 ## 0.9.0
 
 Structured session data: YAML frontmatter for behavioral phenotyping.

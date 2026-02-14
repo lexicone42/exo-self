@@ -5,7 +5,7 @@
 #   ./deploy.sh          # Install/update plugin
 #   ./deploy.sh --check  # Show what would change without modifying anything
 #
-# Prerequisites: uv (https://astral.sh/uv), jq, git
+# Prerequisites: cargo (Rust toolchain), jq, git
 # Works on Linux and macOS.
 #
 # IMPORTANT: This script registers the plugin as a GitHub-sourced marketplace,
@@ -46,13 +46,13 @@ echo "=== claude-exo-self deploy v${VERSION} ==="
 echo ""
 
 # --- Check prerequisites ---
-for cmd in uv jq git; do
+for cmd in cargo jq git; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "ERROR: $cmd is required but not found."
         case "$cmd" in
-            uv)  echo "Install: curl -LsSf https://astral.sh/uv/install.sh | sh" ;;
-            jq)  echo "Install: brew install jq  (macOS) or apt install jq  (Linux)" ;;
-            git) echo "Install: brew install git  (macOS) or apt install git  (Linux)" ;;
+            cargo) echo "Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" ;;
+            jq)    echo "Install: brew install jq  (macOS) or apt install jq  (Linux)" ;;
+            git)   echo "Install: brew install git  (macOS) or apt install git  (Linux)" ;;
         esac
         exit 1
     fi
@@ -78,7 +78,7 @@ if $CHECK_ONLY; then
 
     if [ -d "$CACHE_DIR" ]; then
         echo "[check] Cache directory exists. Changes:"
-        diff -rq "$SCRIPT_DIR" "$CACHE_DIR" --exclude=deploy.sh 2>/dev/null || true
+        diff -rq "$SCRIPT_DIR" "$CACHE_DIR" --exclude=deploy.sh --exclude=target --exclude=bin 2>/dev/null || true
     else
         # Check for old versions in the new cache path
         OLD_DIRS=$(find "$CLAUDE_DIR/plugins/cache/$MARKETPLACE/$PLUGIN_NAME" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -v "$VERSION" || true)
@@ -91,83 +91,65 @@ if $CHECK_ONLY; then
     exit 0
 fi
 
-# --- 1. Sync version in marketplace.json and plugin.json ---
-echo "1. Syncing version to $VERSION..."
+# --- 1. Build Rust binary ---
+echo "1. Building Rust binary..."
+cd "$SCRIPT_DIR"
+cargo build --release --quiet 2>&1
+mkdir -p "$SCRIPT_DIR/bin"
+cp "$SCRIPT_DIR/target/release/exo-self" "$SCRIPT_DIR/bin/exo-self"
+chmod +x "$SCRIPT_DIR/bin/exo-self"
+echo "   -> bin/exo-self ($(du -h "$SCRIPT_DIR/bin/exo-self" | cut -f1) stripped)"
 
-# marketplace.json at repo root (for marketplace installs)
+# --- 2. Sync version in marketplace.json and plugin.json ---
+echo "2. Syncing version to $VERSION..."
+
+# marketplace.json at repo root
 MARKETPLACE_JSON="$SCRIPT_DIR/../../.claude-plugin/marketplace.json"
-# plugin.json inside plugin dir (for local/cache installs)
+# plugin.json inside plugin dir
 PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
 
 for JSON_FILE in "$MARKETPLACE_JSON" "$PLUGIN_JSON"; do
     [ -f "$JSON_FILE" ] || continue
     BASENAME=$(basename "$(dirname "$JSON_FILE")")/$(basename "$JSON_FILE")
-    uv run python -c "
-import json, sys
-with open('$JSON_FILE') as f:
-    data = json.load(f)
-changed = False
-# marketplace.json has plugins array
-for p in data.get('plugins', []):
-    if p.get('name') == '$PLUGIN_NAME' and p.get('version') != '$VERSION':
-        p['version'] = '$VERSION'
-        changed = True
-# plugin.json has top-level version
-if 'plugins' not in data and data.get('version') != '$VERSION':
-    data['version'] = '$VERSION'
-    changed = True
-if changed:
-    with open('$JSON_FILE', 'w') as f:
-        json.dump(data, f, indent=2)
-        f.write('\n')
-    print(f'   -> {\"$BASENAME\"} updated to $VERSION')
-else:
-    print(f'   -> {\"$BASENAME\"} already at $VERSION')
-" 2>/dev/null
+    CURRENT_VER=$(jq -r '.version // empty' "$JSON_FILE" 2>/dev/null || true)
+    if [ -z "$CURRENT_VER" ]; then
+        # marketplace.json format: update plugins[].version
+        CURRENT_VER=$(jq -r ".plugins[] | select(.name == \"$PLUGIN_NAME\") | .version // empty" "$JSON_FILE" 2>/dev/null || true)
+        if [ -n "$CURRENT_VER" ] && [ "$CURRENT_VER" != "$VERSION" ]; then
+            jq "(.plugins[] | select(.name == \"$PLUGIN_NAME\") | .version) = \"$VERSION\"" "$JSON_FILE" > "${JSON_FILE}.tmp" && mv "${JSON_FILE}.tmp" "$JSON_FILE"
+            echo "   -> $BASENAME updated to $VERSION"
+        else
+            echo "   -> $BASENAME already at $VERSION"
+        fi
+    elif [ "$CURRENT_VER" != "$VERSION" ]; then
+        # plugin.json format: top-level version
+        jq ".version = \"$VERSION\"" "$JSON_FILE" > "${JSON_FILE}.tmp" && mv "${JSON_FILE}.tmp" "$JSON_FILE"
+        echo "   -> $BASENAME updated to $VERSION"
+    else
+        echo "   -> $BASENAME already at $VERSION"
+    fi
 done
 
-# --- 2. Register marketplace in known_marketplaces.json ---
-echo "2. Registering marketplace..."
+# --- 3. Register marketplace in known_marketplaces.json ---
+echo "3. Registering marketplace..."
 mkdir -p "$CLAUDE_DIR/plugins"
 
-uv run python << PYEOF
-import json, os
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-mkt_path = "$KNOWN_MKT_JSON"
-marketplace = "$MARKETPLACE"
-github_repo = "$GITHUB_REPO"
-mkt_dir = "$MARKETPLACE_DIR"
+if [ ! -f "$KNOWN_MKT_JSON" ]; then
+    echo '{}' > "$KNOWN_MKT_JSON"
+fi
 
-data = {}
-if os.path.exists(mkt_path):
-    try:
-        with open(mkt_path) as f:
-            data = json.load(f)
-    except Exception:
-        pass
+if jq -e ".[\"$MARKETPLACE\"]" "$KNOWN_MKT_JSON" &>/dev/null; then
+    jq ".[\"$MARKETPLACE\"].installLocation = \"$MARKETPLACE_DIR\"" "$KNOWN_MKT_JSON" > "${KNOWN_MKT_JSON}.tmp" && mv "${KNOWN_MKT_JSON}.tmp" "$KNOWN_MKT_JSON"
+    echo "   -> $MARKETPLACE already registered, updated installLocation"
+else
+    jq ". + {\"$MARKETPLACE\": {\"source\": {\"source\": \"github\", \"repo\": \"$GITHUB_REPO\"}, \"installLocation\": \"$MARKETPLACE_DIR\", \"lastUpdated\": \"$NOW\"}}" "$KNOWN_MKT_JSON" > "${KNOWN_MKT_JSON}.tmp" && mv "${KNOWN_MKT_JSON}.tmp" "$KNOWN_MKT_JSON"
+    echo "   -> Registered $MARKETPLACE (github: $GITHUB_REPO)"
+fi
 
-if marketplace in data:
-    # Update installLocation in case it changed
-    data[marketplace]["installLocation"] = mkt_dir
-    print(f"   -> {marketplace} already registered, updated installLocation")
-else:
-    from datetime import datetime, timezone
-    data[marketplace] = {
-        "source": {
-            "source": "github",
-            "repo": github_repo
-        },
-        "installLocation": mkt_dir,
-        "lastUpdated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    }
-    print(f"   -> Registered {marketplace} (github: {github_repo})")
-
-with open(mkt_path, "w") as f:
-    json.dump(data, f, indent=2)
-PYEOF
-
-# --- 3. Setup marketplace directory ---
-echo "3. Setting up marketplace directory..."
+# --- 4. Setup marketplace directory ---
+echo "4. Setting up marketplace directory..."
 
 if [ ! -d "$MARKETPLACE_DIR/.git" ]; then
     echo "   -> Cloning from GitHub..."
@@ -178,16 +160,15 @@ else
     echo "   -> Marketplace clone exists"
 fi
 
-# Overlay local plugin files onto the clone so local changes take effect
-# This syncs the plugin source dir into the marketplace's expected plugin location
+# Overlay local plugin files onto the clone
 MARKETPLACE_PLUGIN_DIR="$MARKETPLACE_DIR/plugins/$PLUGIN_NAME"
 mkdir -p "$MARKETPLACE_PLUGIN_DIR"
 
 if command -v rsync &>/dev/null; then
-    rsync -a --delete --exclude=deploy.sh "$SCRIPT_DIR/" "$MARKETPLACE_PLUGIN_DIR/"
+    rsync -a --delete --exclude=deploy.sh --exclude=target "$SCRIPT_DIR/" "$MARKETPLACE_PLUGIN_DIR/"
 else
     rm -rf "$MARKETPLACE_PLUGIN_DIR"/*
-    find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 ! -name deploy.sh -exec cp -R {} "$MARKETPLACE_PLUGIN_DIR/" \;
+    find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 ! -name deploy.sh ! -name target -exec cp -R {} "$MARKETPLACE_PLUGIN_DIR/" \;
 fi
 
 # Also sync marketplace.json to the clone's root .claude-plugin/
@@ -197,10 +178,10 @@ if [ -f "$MARKETPLACE_JSON" ]; then
 fi
 echo "   -> Synced local files to marketplace clone"
 
-# --- 4. Sync plugin files to cache ---
-echo "4. Syncing plugin to cache..."
+# --- 5. Sync plugin files to cache ---
+echo "5. Syncing plugin to cache..."
 
-# Remove old version directories in the new cache path
+# Remove old version directories
 if [ -d "$CLAUDE_DIR/plugins/cache/$MARKETPLACE/$PLUGIN_NAME" ]; then
     find "$CLAUDE_DIR/plugins/cache/$MARKETPLACE/$PLUGIN_NAME" -mindepth 1 -maxdepth 1 -type d ! -name "$VERSION" -exec rm -rf {} + 2>/dev/null || true
 fi
@@ -208,31 +189,30 @@ fi
 mkdir -p "$CACHE_DIR"
 
 if command -v rsync &>/dev/null; then
-    rsync -a --delete --exclude=deploy.sh "$SCRIPT_DIR/" "$CACHE_DIR/"
+    rsync -a --delete --exclude=deploy.sh --exclude=target "$SCRIPT_DIR/" "$CACHE_DIR/"
 else
     rm -rf "$CACHE_DIR"/*
-    find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 ! -name deploy.sh -exec cp -R {} "$CACHE_DIR/" \;
+    find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 ! -name deploy.sh ! -name target -exec cp -R {} "$CACHE_DIR/" \;
 fi
 echo "   -> $CACHE_DIR"
 
-# --- 5. Clean up old cache/local/ installation ---
+# --- 6. Clean up old cache/local/ installation ---
 if [ -d "$OLD_LOCAL_CACHE" ]; then
-    echo "5. Removing old cache/local/ installation..."
+    echo "6. Removing old cache/local/ installation..."
     rm -rf "$OLD_LOCAL_CACHE"
     echo "   -> Removed $OLD_LOCAL_CACHE"
-    # Clean up empty parent if no other local plugins remain
     rmdir "$CLAUDE_DIR/plugins/cache/local" 2>/dev/null || true
 else
-    echo "5. No old cache/local/ to clean up."
+    echo "6. No old cache/local/ to clean up."
 fi
 
-# --- 6. Create runtime directories ---
-echo "6. Creating runtime directories..."
+# --- 7. Create runtime directories ---
+echo "7. Creating runtime directories..."
 mkdir -p "$EXO_DIR"/{reflections,per-project,sessions}
 
-# --- 7. Create default config if missing ---
+# --- 8. Create default config if missing ---
 if [ ! -f "$EXO_DIR/config.json" ]; then
-    echo "7. Creating default config..."
+    echo "8. Creating default config..."
     cat > "$EXO_DIR/config.json" << 'CFGEOF'
 {
   "estimated_max_chars": 800000,
@@ -246,57 +226,34 @@ if [ ! -f "$EXO_DIR/config.json" ]; then
 }
 CFGEOF
 else
-    echo "7. Config exists, skipping."
+    echo "8. Config exists, skipping."
 fi
 
-# --- 8. Update installed_plugins.json ---
-echo "8. Updating installed_plugins.json..."
+# --- 9. Update installed_plugins.json ---
+echo "9. Updating installed_plugins.json..."
 
-# Get git commit SHA for marketplace-compatible format
 GIT_SHA=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "")
 
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+if [ ! -f "$INSTALLED_JSON" ]; then
+    echo '{"version": 2, "plugins": {}}' > "$INSTALLED_JSON"
+fi
 
-uv run python << PYEOF
-import json, os
+INSTALLED_AT=$(jq -r ".plugins[\"$PLUGIN_KEY\"][0].installedAt // \"$NOW\"" "$INSTALLED_JSON" 2>/dev/null || echo "$NOW")
 
-installed_path = "$INSTALLED_JSON"
-plugin_key = "$PLUGIN_KEY"
-cache_dir = "$CACHE_DIR"
-version = "$VERSION"
-now = "$NOW"
-git_sha = "$GIT_SHA"
+ENTRY=$(jq -n \
+    --arg scope "user" \
+    --arg installPath "$CACHE_DIR" \
+    --arg version "$VERSION" \
+    --arg installedAt "$INSTALLED_AT" \
+    --arg lastUpdated "$NOW" \
+    --arg gitSha "$GIT_SHA" \
+    '{scope: $scope, installPath: $installPath, version: $version, installedAt: $installedAt, lastUpdated: $lastUpdated} + (if $gitSha != "" then {gitCommitSha: $gitSha} else {} end)')
 
-# Load or create
-data = {"version": 2, "plugins": {}}
-if os.path.exists(installed_path):
-    try:
-        with open(installed_path) as f:
-            data = json.load(f)
-    except Exception:
-        pass
+jq ".plugins[\"$PLUGIN_KEY\"] = [$ENTRY]" "$INSTALLED_JSON" > "${INSTALLED_JSON}.tmp" && mv "${INSTALLED_JSON}.tmp" "$INSTALLED_JSON"
+echo "   -> $PLUGIN_KEY = $VERSION$([ -n "$GIT_SHA" ] && echo " (${GIT_SHA:0:12})" || true)"
 
-entry = {
-    "scope": "user",
-    "installPath": cache_dir,
-    "version": version,
-    "installedAt": data.get("plugins", {}).get(plugin_key, [{}])[0].get("installedAt", now) if plugin_key in data.get("plugins", {}) else now,
-    "lastUpdated": now,
-}
-
-if git_sha:
-    entry["gitCommitSha"] = git_sha
-
-data.setdefault("plugins", {})[plugin_key] = [entry]
-
-with open(installed_path, "w") as f:
-    json.dump(data, f, indent=2)
-
-print(f"   -> {plugin_key} = {version}" + (f" ({git_sha[:12]})" if git_sha else ""))
-PYEOF
-
-# --- 9. Install statusline ---
-echo "9. Installing statusline..."
+# --- 10. Install statusline ---
+echo "10. Installing statusline..."
 STATUSLINE_SRC="$SCRIPT_DIR/statusline.sh"
 STATUSLINE_DST="$CLAUDE_DIR/statusline.sh"
 
@@ -308,82 +265,55 @@ else
     echo "   -> statusline.sh not found in source, skipping."
 fi
 
-# --- 10. Enable plugin + statusline in settings.json ---
-echo "10. Updating settings.json..."
+# --- 11. Enable plugin + statusline in settings.json ---
+echo "11. Updating settings.json..."
 
-uv run python << PYEOF
-import json, os
-
-settings_path = "$SETTINGS_JSON"
-plugin_key = "$PLUGIN_KEY"
-statusline_dst = "$STATUSLINE_DST"
-
-data = {}
-if os.path.exists(settings_path):
-    try:
-        with open(settings_path) as f:
-            data = json.load(f)
-    except Exception:
-        pass
-
-changed = False
-home = os.path.expanduser("~")
-exo_dir = f"{home}/.claude/exo-self"
+if [ ! -f "$SETTINGS_JSON" ]; then
+    echo '{}' > "$SETTINGS_JSON"
+fi
 
 # Ensure exo-self permissions are allowed
-allows = data.setdefault("permissions", {}).setdefault("allow", [])
-needed_allows = [
-    # File access for exo-self data (journal, interests, per-project notes, etc.)
-    f"Read({exo_dir}/**)",
-    f"Write({exo_dir}/**)",
-    f"Edit({exo_dir}/**)",
-    # Auto-allow all exo-self slash commands and skills
-    "Skill(claude-exo-self:context-budget)",
-    "Skill(claude-exo-self:exo)",
-    "Skill(claude-exo-self:interests)",
-    "Skill(claude-exo-self:reflect)",
-    "Skill(claude-exo-self:self-reflection)",
-]
-added = []
-for rule in needed_allows:
-    if rule not in allows:
-        allows.append(rule)
-        changed = True
-        added.append(rule)
-if added:
-    print(f"   -> {len(added)} permission(s) added:")
-    for rule in added:
-        print(f"      {rule}")
-else:
-    print("   -> Exo-self permissions already configured.")
+NEEDED_ALLOWS=(
+    "Read($EXO_DIR/**)"
+    "Write($EXO_DIR/**)"
+    "Edit($EXO_DIR/**)"
+    "Skill(claude-exo-self:context-budget)"
+    "Skill(claude-exo-self:exo)"
+    "Skill(claude-exo-self:interests)"
+    "Skill(claude-exo-self:reflect)"
+    "Skill(claude-exo-self:self-reflection)"
+)
+
+ADDED=0
+for RULE in "${NEEDED_ALLOWS[@]}"; do
+    if ! jq -e ".permissions.allow // [] | index(\"$RULE\")" "$SETTINGS_JSON" &>/dev/null; then
+        jq ".permissions.allow = ((.permissions.allow // []) + [\"$RULE\"])" "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+        ADDED=$((ADDED + 1))
+    fi
+done
+if [ "$ADDED" -gt 0 ]; then
+    echo "   -> $ADDED permission(s) added."
+else
+    echo "   -> Exo-self permissions already configured."
+fi
 
 # Enable plugin
-enabled = data.setdefault("enabledPlugins", {})
-if enabled.get(plugin_key) is not True:
-    enabled[plugin_key] = True
-    changed = True
-    print("   -> Plugin enabled.")
-else:
-    print("   -> Plugin already enabled.")
+if ! jq -e ".enabledPlugins[\"$PLUGIN_KEY\"] == true" "$SETTINGS_JSON" &>/dev/null; then
+    jq ".enabledPlugins[\"$PLUGIN_KEY\"] = true" "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+    echo "   -> Plugin enabled."
+else
+    echo "   -> Plugin already enabled."
+fi
 
 # Configure statusline
-statusline = data.get("statusLine", {})
-expected = {
-    "type": "command",
-    "command": "~/.claude/statusline.sh",
-    "padding": 0,
-}
-if statusline != expected:
-    data["statusLine"] = expected
-    changed = True
-    print("   -> Statusline configured.")
-else:
-    print("   -> Statusline already configured.")
-
-if changed:
-    with open(settings_path, "w") as f:
-        json.dump(data, f, indent=2)
-PYEOF
+EXPECTED_STATUSLINE='{"type":"command","command":"~/.claude/statusline.sh","padding":0}'
+CURRENT_STATUSLINE=$(jq -c '.statusLine // {}' "$SETTINGS_JSON" 2>/dev/null)
+if [ "$CURRENT_STATUSLINE" != "$EXPECTED_STATUSLINE" ]; then
+    jq '.statusLine = {"type":"command","command":"~/.claude/statusline.sh","padding":0}' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+    echo "   -> Statusline configured."
+else
+    echo "   -> Statusline already configured."
+fi
 
 # --- Done ---
 echo ""
