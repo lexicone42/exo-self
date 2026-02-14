@@ -56,7 +56,10 @@ pub fn hook_output(event_name: &str, context: &str) {
             additional_context: context.to_string(),
         },
     };
-    println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{}".into()));
+    println!(
+        "{}",
+        serde_json::to_string(&out).unwrap_or_else(|_| "{}".into())
+    );
 }
 
 /// Print a stop-hook decision
@@ -65,7 +68,10 @@ pub fn decision_output(decision: &str, reason: &str) {
         decision: decision.to_string(),
         reason: reason.to_string(),
     };
-    println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{}".into()));
+    println!(
+        "{}",
+        serde_json::to_string(&out).unwrap_or_else(|_| "{}".into())
+    );
 }
 
 /// Print empty JSON (no-op output)

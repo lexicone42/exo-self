@@ -171,7 +171,9 @@ fn get_git_info(dir: &str) -> (String, String, String) {
             .ok()
             .and_then(|o| {
                 if o.status.success() {
-                    String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                    String::from_utf8(o.stdout)
+                        .ok()
+                        .map(|s| s.trim().to_string())
                 } else {
                     None
                 }
@@ -211,16 +213,14 @@ fn get_git_info(dir: &str) -> (String, String, String) {
     if !upstream.is_empty() {
         let ahead = run(&["rev-list", "--count", &format!("{upstream}..HEAD")]);
         let behind = run(&["rev-list", "--count", &format!("HEAD..{upstream}")]);
-        if let Ok(n) = ahead.parse::<u64>() {
-            if n > 0 {
+        if let Ok(n) = ahead.parse::<u64>()
+            && n > 0 {
                 write!(status, "↑{n}").unwrap();
             }
-        }
-        if let Ok(n) = behind.parse::<u64>() {
-            if n > 0 {
+        if let Ok(n) = behind.parse::<u64>()
+            && n > 0 {
                 write!(status, "↓{n}").unwrap();
             }
-        }
     }
 
     (repo_name, branch, status)

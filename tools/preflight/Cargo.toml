@@ -1,0 +1,7 @@
+[package]
+name = "preflight"
+version = "0.1.0"
+edition = "2024"
+description = "Pre-commit preflight: run formatters + linters + stage, so commits land clean on the first try"
+
+[dependencies]

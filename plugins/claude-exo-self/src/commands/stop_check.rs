@@ -44,7 +44,11 @@ pub fn run() {
 
     // Update meta with session end time
     let mut meta = Meta::load(&paths.meta);
-    meta.last_session_end = Some(chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string());
+    meta.last_session_end = Some(
+        chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string(),
+    );
     meta.save(&paths.meta);
 
     // --- Decision logic ---
@@ -74,7 +78,10 @@ pub fn run() {
                 .max_by_key(|(_, c)| *c)
                 .map(|(t, _)| t.as_str())
                 .unwrap_or("tools");
-            reason.push_str(&format!(", {} failures ({})", state.tool_failures, top_tool));
+            reason.push_str(&format!(
+                ", {} failures ({})",
+                state.tool_failures, top_tool
+            ));
         }
         if state.task_completions >= 2 {
             reason.push_str(&format!(", {} tasks done", state.task_completions));
@@ -82,7 +89,9 @@ pub fn run() {
         if state.compactions > 0 {
             reason.push_str(&format!(", {}x compacted", state.compactions));
         }
-        reason.push_str(&format!(". A sentence to ~/{target}? If nothing to note, just stop."));
+        reason.push_str(&format!(
+            ". A sentence to ~/{target}? If nothing to note, just stop."
+        ));
 
         state.save(&paths);
         hook_io::decision_output("block", &reason);
@@ -94,9 +103,9 @@ pub fn run() {
 
 fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
     // Per-session notes file
-    if !state.session_notes_path.is_empty() {
-        if let Ok(meta) = std::fs::metadata(&state.session_notes_path) {
-            if meta.len() > 0 {
+    if !state.session_notes_path.is_empty()
+        && let Ok(meta) = std::fs::metadata(&state.session_notes_path)
+            && meta.len() > 0 {
                 // Check if file has content beyond just frontmatter
                 if let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
                     // Has content beyond frontmatter template
@@ -106,13 +115,11 @@ fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64
                     }
                 }
             }
-        }
-    }
 
     // Journal mtime fallback
-    if session_start > 0.0 {
-        if let Ok(meta) = std::fs::metadata(&paths.journal) {
-            if let Ok(modified) = meta.modified() {
+    if session_start > 0.0
+        && let Ok(meta) = std::fs::metadata(&paths.journal)
+            && let Ok(modified) = meta.modified() {
                 let mtime = modified
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -121,8 +128,6 @@ fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64
                     return true;
                 }
             }
-        }
-    }
 
     false
 }

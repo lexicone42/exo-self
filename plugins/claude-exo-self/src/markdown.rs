@@ -4,11 +4,7 @@ use std::collections::HashMap;
 pub fn last_journal_entries(content: &str, max_entries: usize, max_chars: usize) -> String {
     let entries: Vec<&str> = content.split("\n## ").collect();
     let count = entries.len();
-    let start = if count > max_entries {
-        count - max_entries
-    } else {
-        0
-    };
+    let start = count.saturating_sub(max_entries);
 
     let mut result = String::new();
     for (i, entry) in entries[start..].iter().enumerate() {
@@ -68,11 +64,13 @@ pub fn extract_sparks(text: &str) -> Vec<String> {
             // Skip separator: whitespace then — or -
             let rest = &text[abs_pos..];
             let rest = rest.trim_start();
-            let rest = if rest.starts_with("—") || rest.starts_with('\u{2014}') {
-                // em dash (UTF-8: 3 bytes)
-                rest['\u{2014}'.len_utf8()..].trim_start()
-            } else if rest.starts_with('-') {
-                rest[1..].trim_start()
+            let rest = if let Some(stripped) = rest
+                .strip_prefix('—')
+                .or_else(|| rest.strip_prefix('\u{2014}'))
+            {
+                stripped.trim_start()
+            } else if let Some(stripped) = rest.strip_prefix('-') {
+                stripped.trim_start()
             } else {
                 rest
             };
@@ -103,9 +101,7 @@ pub fn extract_sparks(text: &str) -> Vec<String> {
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 /// Parse YAML frontmatter from a markdown file.
@@ -157,10 +153,7 @@ pub fn render_frontmatter(map: &HashMap<String, serde_yaml::Value>, prose: &str)
     }
 
     // Then any remaining keys
-    let mut remaining: Vec<_> = map
-        .keys()
-        .filter(|k| !seen.contains(k.as_str()))
-        .collect();
+    let mut remaining: Vec<_> = map.keys().filter(|k| !seen.contains(k.as_str())).collect();
     remaining.sort();
     for key in remaining {
         if let Some(val) = map.get(key) {
@@ -277,10 +270,7 @@ mod tests {
     fn test_parse_frontmatter() {
         let content = "---\nsession_id: \"abc\"\ndate: \"2026-01-01\"\n---\n\nProse here";
         let (fm, prose) = parse_frontmatter(content);
-        assert_eq!(
-            fm.get("session_id").and_then(|v| v.as_str()),
-            Some("abc")
-        );
+        assert_eq!(fm.get("session_id").and_then(|v| v.as_str()), Some("abc"));
         assert_eq!(prose, "Prose here");
     }
 

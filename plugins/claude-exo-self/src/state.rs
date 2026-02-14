@@ -85,10 +85,9 @@ impl SessionState {
             return Self::default();
         }
         let path = paths.state_file(session_id);
-        Self::load_from(&path).unwrap_or_else(|| {
-            let mut s = Self::default();
-            s.session_start = now();
-            s
+        Self::load_from(&path).unwrap_or_else(|| Self {
+            session_start: now(),
+            ..Self::default()
         })
     }
 
@@ -126,10 +125,10 @@ impl SessionState {
         let cutoff = now() - 86400.0; // 24 hours
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with("state-") && name.ends_with(".json") {
-                    if let Ok(meta) = std::fs::metadata(&path) {
-                        if let Ok(modified) = meta.modified() {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.starts_with("state-") && name.ends_with(".json")
+                    && let Ok(meta) = std::fs::metadata(&path)
+                        && let Ok(modified) = meta.modified() {
                             let age = modified
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap_or_default()
@@ -138,9 +137,6 @@ impl SessionState {
                                 let _ = std::fs::remove_file(&path);
                             }
                         }
-                    }
-                }
-            }
         }
     }
 }

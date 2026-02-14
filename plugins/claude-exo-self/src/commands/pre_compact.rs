@@ -11,22 +11,20 @@ pub fn run() {
     let session_id = &input.session_id;
 
     // Step 1: Automatic handoff extraction from transcript
-    if !input.transcript_path.is_empty() {
-        if std::fs::metadata(&input.transcript_path).is_ok() {
-            let handoff_name = if session_id.is_empty() {
-                "latest".to_string()
-            } else {
-                session_id.clone()
-            };
-            let handoff_file = paths.handoff_file(&handoff_name);
+    if !input.transcript_path.is_empty() && std::fs::metadata(&input.transcript_path).is_ok() {
+        let handoff_name = if session_id.is_empty() {
+            "latest".to_string()
+        } else {
+            session_id.clone()
+        };
+        let handoff_file = paths.handoff_file(&handoff_name);
 
-            // Run extract-handoff inline (it's a pure function)
-            let content = extract_handoff_content(&input.transcript_path);
-            if !content.is_empty() {
-                let _ = std::fs::write(&handoff_file, &content);
-                // Also save as "latest"
-                let _ = std::fs::write(paths.handoffs_dir.join("latest.md"), &content);
-            }
+        // Run extract-handoff inline (it's a pure function)
+        let content = extract_handoff_content(&input.transcript_path);
+        if !content.is_empty() {
+            let _ = std::fs::write(&handoff_file, &content);
+            // Also save as "latest"
+            let _ = std::fs::write(paths.handoffs_dir.join("latest.md"), &content);
         }
     }
 
@@ -42,7 +40,11 @@ pub fn run() {
     // Update meta
     let mut meta = Meta::load(&paths.meta);
     meta.total_compactions += 1;
-    meta.last_compaction = Some(chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string());
+    meta.last_compaction = Some(
+        chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string(),
+    );
     meta.save(&paths.meta);
 
     let compaction_num = state.compactions;
@@ -102,7 +104,11 @@ fn extract_handoff_content(transcript_path: &str) -> String {
                 } else if let Some(arr) = content.as_array() {
                     for block in arr {
                         if block.get("type").and_then(|t| t.as_str()) == Some("text") {
-                            let text = block.get("text").and_then(|t| t.as_str()).unwrap_or("").trim();
+                            let text = block
+                                .get("text")
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .trim();
                             if !text.is_empty() && !text.starts_with("<system-reminder>") {
                                 let t = if text.len() > 200 { &text[..197] } else { text };
                                 user_prompts.push(t.to_string());
@@ -116,7 +122,11 @@ fn extract_handoff_content(transcript_path: &str) -> String {
                     for block in arr {
                         let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
                         if btype == "text" {
-                            let text = block.get("text").and_then(|t| t.as_str()).unwrap_or("").trim();
+                            let text = block
+                                .get("text")
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .trim();
                             if !text.is_empty() {
                                 assistant_texts.push(text.to_string());
                             }
@@ -125,11 +135,14 @@ fn extract_handoff_content(transcript_path: &str) -> String {
                             if !tool.is_empty() {
                                 tools_used.insert(tool.to_string());
                             }
-                            if tool == "Edit" || tool == "Write" {
-                                if let Some(fp) = block.get("input").and_then(|i| i.get("file_path")).and_then(|p| p.as_str()) {
+                            if (tool == "Edit" || tool == "Write")
+                                && let Some(fp) = block
+                                    .get("input")
+                                    .and_then(|i| i.get("file_path"))
+                                    .and_then(|p| p.as_str())
+                                {
                                     files_modified.insert(fp.to_string());
                                 }
-                            }
                         }
                     }
                 }
@@ -140,21 +153,40 @@ fn extract_handoff_content(transcript_path: &str) -> String {
 
     let mut sections = Vec::new();
     if !user_prompts.is_empty() {
-        let first: Vec<_> = user_prompts.iter().take(3).map(|p| format!("- {p}")).collect();
+        let first: Vec<_> = user_prompts
+            .iter()
+            .take(3)
+            .map(|p| format!("- {p}"))
+            .collect();
         let mut s = first.join("\n");
         if user_prompts.len() > 3 {
-            let last: Vec<_> = user_prompts.iter().rev().take(2).collect::<Vec<_>>().into_iter().rev().map(|p| format!("- {p}")).collect();
+            let last: Vec<_> = user_prompts
+                .iter()
+                .rev()
+                .take(2)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .map(|p| format!("- {p}"))
+                .collect();
             s.push_str("\n...\n");
             s.push_str(&last.join("\n"));
         }
         sections.push(format!("## User Requests\n\n{s}"));
     }
     if !files_modified.is_empty() {
-        let list = files_modified.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("\n");
+        let list = files_modified
+            .iter()
+            .map(|f| format!("- {f}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         sections.push(format!("## Files Modified\n\n{list}"));
     }
     if !tools_used.is_empty() {
-        sections.push(format!("## Tools Used\n\n{}", tools_used.into_iter().collect::<Vec<_>>().join(", ")));
+        sections.push(format!(
+            "## Tools Used\n\n{}",
+            tools_used.into_iter().collect::<Vec<_>>().join(", ")
+        ));
     }
     if let Some(last) = assistant_texts.last() {
         let mut summary = last.clone();

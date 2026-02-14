@@ -37,10 +37,7 @@ pub fn run() {
     };
 
     // Detect auto-memory
-    let auto_memory_exists = paths
-        .auto_memory_dir()
-        .map(|d| d.is_dir())
-        .unwrap_or(false);
+    let auto_memory_exists = paths.auto_memory_dir().map(|d| d.is_dir()).unwrap_or(false);
 
     // Load session state
     let state = SessionState::load(&paths, session_id);

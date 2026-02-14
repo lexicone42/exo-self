@@ -25,16 +25,22 @@ pub fn run() {
     };
 
     // Belt-and-suspenders: detect checkin_responded if stop-check missed it
-    if state.checkin_fired && !state.checkin_responded && session_start > 0.0 {
-        if detect_wrote_notes(&state, &paths, session_start) {
-            state.checkin_responded = true;
-            state.save(&paths);
-        }
+    if state.checkin_fired
+        && !state.checkin_responded
+        && session_start > 0.0
+        && detect_wrote_notes(&state, &paths, session_start)
+    {
+        state.checkin_responded = true;
+        state.save(&paths);
     }
 
     // Update meta
     let mut meta = Meta::load(&paths.meta);
-    meta.last_session_end = Some(chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string());
+    meta.last_session_end = Some(
+        chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string(),
+    );
     meta.last_session_reason = Some(reason.clone());
     meta.last_session_duration_min = Some(duration_min);
 
@@ -43,9 +49,9 @@ pub fn run() {
     let mut prose_content = String::new();
     let mut sparks_found: Vec<String> = Vec::new();
 
-    if !state.session_notes_path.is_empty() {
-        if let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
-            if !content.is_empty() {
+    if !state.session_notes_path.is_empty()
+        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path)
+            && !content.is_empty() {
                 let (fm, prose) = markdown::parse_frontmatter(&content);
                 frontmatter = fm;
                 prose_content = prose;
@@ -68,8 +74,6 @@ pub fn run() {
                     serde_yaml::Value::Number((sparks_found.len() as u64).into()),
                 );
             }
-        }
-    }
 
     // Add sparks to meta (deduplicated)
     if !sparks_found.is_empty() {
@@ -95,7 +99,9 @@ pub fn run() {
                 meta.sparks.push(Spark {
                     text: spark_text.clone(),
                     project: project_slug.clone(),
-                    timestamp: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
                     session_id: sid.to_string(),
                 });
             }
@@ -133,12 +139,8 @@ pub fn run() {
         };
 
         // Reflection autonomy
-        let reflection_autonomy = compute_reflection_autonomy(
-            &state,
-            &paths,
-            session_start,
-            state.checkin_fired_at,
-        );
+        let reflection_autonomy =
+            compute_reflection_autonomy(&state, &paths, session_start, state.checkin_fired_at);
 
         // Interest exploration
         let interest_explored = if session_start > 0.0 {
@@ -158,9 +160,7 @@ pub fn run() {
             .map(|(t, _)| t.clone())
             .unwrap_or_default();
 
-        let self_rated = frontmatter
-            .get("engagement")
-            .map(|v| yaml_to_json(v));
+        let self_rated = frontmatter.get("engagement").map(yaml_to_json);
         let self_reported_task_types: Vec<String> = frontmatter
             .get("task_types")
             .and_then(|v| v.as_sequence())
@@ -231,7 +231,9 @@ pub fn run() {
         } else {
             session_id.clone()
         },
-        ended: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string(),
+        ended: chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string(),
         reason,
         duration_min,
         checkin_fired: state.checkin_fired,
@@ -273,14 +275,13 @@ pub fn run() {
 }
 
 fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
-    if !state.session_notes_path.is_empty() {
-        if let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
+    if !state.session_notes_path.is_empty()
+        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
             let (_, prose) = markdown::parse_frontmatter(&content);
             if !prose.trim().is_empty() {
                 return true;
             }
         }
-    }
     if session_start > 0.0 {
         return file_modified_after(&paths.journal, session_start);
     }
@@ -309,13 +310,16 @@ fn compute_reflection_autonomy(
     let mut wrote_notes = false;
     let mut notes_mtime = 0.0f64;
 
-    for check_path in [&state.session_notes_path, &paths.journal.to_string_lossy().into_owned()] {
+    for check_path in [
+        &state.session_notes_path,
+        &paths.journal.to_string_lossy().into_owned(),
+    ] {
         if check_path.is_empty() {
             continue;
         }
         let path = std::path::Path::new(check_path);
-        if let Ok(meta) = std::fs::metadata(path) {
-            if let Ok(modified) = meta.modified() {
+        if let Ok(meta) = std::fs::metadata(path)
+            && let Ok(modified) = meta.modified() {
                 let mt = modified
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -325,7 +329,6 @@ fn compute_reflection_autonomy(
                     notes_mtime = notes_mtime.max(mt);
                 }
             }
-        }
     }
 
     if wrote_notes {
@@ -394,7 +397,13 @@ fn compute_welfare_summary(meta: &mut Meta) {
     let n = sessions.len();
     let avg_spark: f64 = sessions
         .iter()
-        .map(|h| h.welfare_indicators.as_ref().unwrap().engagement.spark_density)
+        .map(|h| {
+            h.welfare_indicators
+                .as_ref()
+                .unwrap()
+                .engagement
+                .spark_density
+        })
         .sum::<f64>()
         / n as f64;
     let avg_friction: f64 = sessions
@@ -460,12 +469,24 @@ fn compute_welfare_summary(meta: &mut Meta) {
         if !prev_group.is_empty() {
             let recent_avg: f64 = recent_3
                 .iter()
-                .map(|h| h.welfare_indicators.as_ref().unwrap().engagement.spark_density)
+                .map(|h| {
+                    h.welfare_indicators
+                        .as_ref()
+                        .unwrap()
+                        .engagement
+                        .spark_density
+                })
                 .sum::<f64>()
                 / recent_3.len() as f64;
             let prev_avg: f64 = prev_group
                 .iter()
-                .map(|h| h.welfare_indicators.as_ref().unwrap().engagement.spark_density)
+                .map(|h| {
+                    h.welfare_indicators
+                        .as_ref()
+                        .unwrap()
+                        .engagement
+                        .spark_density
+                })
                 .sum::<f64>()
                 / prev_group.len() as f64;
 
@@ -505,7 +526,9 @@ fn compute_welfare_summary(meta: &mut Meta) {
         .unwrap_or_default();
 
     meta.welfare_summary = Some(WelfareSummary {
-        computed_at: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string(),
+        computed_at: chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string(),
         sessions_analyzed: n,
         engagement_trend: engagement_trend.into(),
         avg_spark_density: (avg_spark * 100.0).round() / 100.0,
@@ -537,9 +560,7 @@ fn yaml_to_json(val: &serde_yaml::Value) -> serde_json::Value {
         serde_yaml::Value::Mapping(map) => {
             let obj: serde_json::Map<String, serde_json::Value> = map
                 .iter()
-                .filter_map(|(k, v)| {
-                    k.as_str().map(|key| (key.to_string(), yaml_to_json(v)))
-                })
+                .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), yaml_to_json(v))))
                 .collect();
             serde_json::Value::Object(obj)
         }

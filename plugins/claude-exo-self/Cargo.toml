@@ -1,7 +1,7 @@
 [package]
 name = "exo-self"
 version = "1.0.1"
-edition = "2021"
+edition = "2024"
 description = "Persistent identity hooks for Claude Code"
 
 [[bin]]

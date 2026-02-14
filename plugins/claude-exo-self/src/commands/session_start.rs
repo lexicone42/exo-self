@@ -103,15 +103,16 @@ pub fn run() {
     }
 
     // Detect auto-memory
-    let auto_memory_exists = paths
-        .auto_memory_dir()
-        .map(|d| d.is_dir())
-        .unwrap_or(false);
+    let auto_memory_exists = paths.auto_memory_dir().map(|d| d.is_dir()).unwrap_or(false);
 
     // Update meta
     let mut meta = Meta::load(&paths.meta);
     meta.total_sessions += 1;
-    meta.last_session_start = Some(chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string());
+    meta.last_session_start = Some(
+        chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string(),
+    );
     meta.save(&paths.meta);
 
     // Merge additionalContext from other plugins
@@ -185,7 +186,15 @@ pub fn run() {
     // Recent sparks from meta
     let max_sparks = scaling::sparks_display(&cfg);
     if !meta.sparks.is_empty() {
-        let recent: Vec<&Spark> = meta.sparks.iter().rev().take(max_sparks).collect::<Vec<_>>().into_iter().rev().collect();
+        let recent: Vec<&Spark> = meta
+            .sparks
+            .iter()
+            .rev()
+            .take(max_sparks)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         let lines: Vec<String> = recent
             .iter()
             .map(|s| {
@@ -201,7 +210,9 @@ pub fn run() {
     }
 
     if !synthesis_findings.is_empty() {
-        sections.push(format!("### Cross-Machine Patterns\n\n{synthesis_findings}"));
+        sections.push(format!(
+            "### Cross-Machine Patterns\n\n{synthesis_findings}"
+        ));
     }
 
     if !project_notes.is_empty() {
@@ -232,35 +243,25 @@ fn merge_plugin_contexts(cfg: &Config) -> String {
     for plugin_name in &cfg.merge_plugins {
         // Search plugin cache: cache/<marketplace>/<plugin-name>/<version>/hooks-handlers/
         let pattern = format!("{cache_dir}/*/{plugin_name}/*/hooks-handlers/session-start.sh");
-        if let Ok(paths) = glob::glob(&pattern) {
-            for entry in paths.flatten() {
-                let output = std::process::Command::new("bash")
+        if let Ok(paths) = glob::glob(&pattern)
+            && let Some(entry) = paths.flatten().next()
+                && let Ok(output) = std::process::Command::new("bash")
                     .arg(&entry)
                     .stdin(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
-                    .output();
-
-                if let Ok(output) = output {
-                    if let Ok(json_str) = String::from_utf8(output.stdout) {
-                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                            if let Some(ctx) = val
+                    .output()
+                    && let Ok(json_str) = String::from_utf8(output.stdout)
+                        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
+                            && let Some(ctx) = val
                                 .get("hookSpecificOutput")
                                 .and_then(|h| h.get("additionalContext"))
                                 .and_then(|c| c.as_str())
-                            {
-                                if !ctx.is_empty() {
+                                && !ctx.is_empty() {
                                     if !merged.is_empty() {
                                         merged.push_str("\n\n");
                                     }
                                     merged.push_str(ctx);
                                 }
-                            }
-                        }
-                    }
-                }
-                break; // Only first match per plugin
-            }
-        }
     }
 
     merged

@@ -17,7 +17,7 @@ pub fn run() {
     state.last_task_completed_at = state::now();
 
     // Nudge on every 5th task completion
-    if state.task_completions % 5 == 0 && !state.task_reflection_suppressed {
+    if state.task_completions.is_multiple_of(5) && !state.task_reflection_suppressed {
         let msg = format!(
             "Exo-self: {} tasks done. Anything worth noting in your session notes?",
             state.task_completions

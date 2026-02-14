@@ -29,11 +29,8 @@ pub fn run() {
         state.project_slug = slug.clone();
     }
 
-    let (usage_ratio, source) = context_window::get_usage_ratio(
-        &paths,
-        &input.transcript_path,
-        cfg.estimated_max_chars,
-    );
+    let (usage_ratio, source) =
+        context_window::get_usage_ratio(&paths, &input.transcript_path, cfg.estimated_max_chars);
 
     if usage_ratio == 0.0 {
         hook_io::empty_output();

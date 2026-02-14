@@ -43,7 +43,11 @@ fn extract(transcript_path: &str, max_chars: usize) -> String {
                 } else if let Some(arr) = content.as_array() {
                     for block in arr {
                         if block.get("type").and_then(|t| t.as_str()) == Some("text") {
-                            let text = block.get("text").and_then(|t| t.as_str()).unwrap_or("").trim();
+                            let text = block
+                                .get("text")
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .trim();
                             if !text.is_empty() && !text.starts_with("<system-reminder>") {
                                 user_prompts.push(truncate(text, 200));
                             }
@@ -57,25 +61,29 @@ fn extract(transcript_path: &str, max_chars: usize) -> String {
                         let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
                         match btype {
                             "text" => {
-                                let text = block.get("text").and_then(|t| t.as_str()).unwrap_or("").trim();
+                                let text = block
+                                    .get("text")
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("")
+                                    .trim();
                                 if !text.is_empty() {
                                     assistant_texts.push(text.to_string());
                                 }
                             }
                             "tool_use" => {
-                                let tool_name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                                let tool_name =
+                                    block.get("name").and_then(|n| n.as_str()).unwrap_or("");
                                 if !tool_name.is_empty() {
                                     tools_used.insert(tool_name.to_string());
                                 }
-                                if tool_name == "Edit" || tool_name == "Write" {
-                                    if let Some(fp) = block
+                                if (tool_name == "Edit" || tool_name == "Write")
+                                    && let Some(fp) = block
                                         .get("input")
                                         .and_then(|i| i.get("file_path"))
                                         .and_then(|p| p.as_str())
                                     {
                                         files_modified.insert(fp.to_string());
                                     }
-                                }
                             }
                             _ => {}
                         }
@@ -91,17 +99,38 @@ fn extract(transcript_path: &str, max_chars: usize) -> String {
     // User requests
     if !user_prompts.is_empty() {
         let first: Vec<_> = user_prompts.iter().take(3).collect();
-        let mut prompt_summary: String = first.iter().map(|p| format!("- {p}")).collect::<Vec<_>>().join("\n");
+        let mut prompt_summary: String = first
+            .iter()
+            .map(|p| format!("- {p}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         if user_prompts.len() > 3 {
-            let last: Vec<_> = user_prompts.iter().rev().take(2).collect::<Vec<_>>().into_iter().rev().collect();
+            let last: Vec<_> = user_prompts
+                .iter()
+                .rev()
+                .take(2)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
             prompt_summary.push_str("\n...\n");
-            prompt_summary.push_str(&last.iter().map(|p| format!("- {p}")).collect::<Vec<_>>().join("\n"));
+            prompt_summary.push_str(
+                &last
+                    .iter()
+                    .map(|p| format!("- {p}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
         }
         sections.push(format!("## User Requests\n\n{prompt_summary}"));
     }
 
     if !files_modified.is_empty() {
-        let list = files_modified.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("\n");
+        let list = files_modified
+            .iter()
+            .map(|f| format!("- {f}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         sections.push(format!("## Files Modified\n\n{list}"));
     }
 

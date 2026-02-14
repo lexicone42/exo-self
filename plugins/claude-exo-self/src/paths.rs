@@ -49,7 +49,7 @@ impl ExoPaths {
     /// Auto-memory directory path for Claude Code's native memory system
     pub fn auto_memory_dir(&self) -> Option<PathBuf> {
         let cwd = std::env::current_dir().ok()?;
-        let slug = cwd.to_string_lossy().replace('/', "-").replace('_', "-");
+        let slug = cwd.to_string_lossy().replace(['/', '_'], "-");
         let home = std::env::var("HOME").ok()?;
         let dir = PathBuf::from(home)
             .join(".claude/projects")
