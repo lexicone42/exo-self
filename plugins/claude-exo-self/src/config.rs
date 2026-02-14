@@ -21,9 +21,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             estimated_max_chars: 800_000,
-            nudge_threshold: 0.40,
-            checkin_threshold: 0.60,
-            reserve_threshold: 0.80,
+            nudge_threshold: 0.50,
+            checkin_threshold: 0.65,
+            reserve_threshold: 0.78,
             max_journal_chars: 1500,
             max_journal_entries: 2,
             max_interests_items: 5,
