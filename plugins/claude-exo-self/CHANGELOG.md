@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+Plan-mode guidance and tracking.
+
+### New
+- **Plan-mode guidance injection** — SubagentStart detects Plan subagents and injects outcome-oriented planning advice (outcomes/constraints, not step-by-step scripts).
+- **Plan-mode tracking** — Sessions record `plan_mode_used` in state, meta.json history entries, and session notes frontmatter. `plan_mode_rate` computed as rolling aggregate in welfare summary for correlation with engagement metrics.
+
+### Changed
+- **Version sync reads Cargo.toml** — sync-version.sh now uses Cargo.toml as the authoritative version source instead of CHANGELOG.md.
+
 ## 1.1.0
 
 The Workshop: tools built from friction data.

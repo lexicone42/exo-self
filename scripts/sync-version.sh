@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Sync version from CHANGELOG.md to marketplace.json and plugin.json
-# Called by prek pre-commit hook when CHANGELOG.md is staged.
+# Sync version from Cargo.toml to plugin.json (and marketplace.json if present)
+# Called by pre-commit hook.
 
 set -euo pipefail
 
 PLUGIN_NAME="claude-exo-self"
-CHANGELOG="plugins/$PLUGIN_NAME/CHANGELOG.md"
+CARGO_TOML="plugins/$PLUGIN_NAME/Cargo.toml"
 MARKETPLACE_JSON=".claude-plugin/marketplace.json"
 PLUGIN_JSON="plugins/$PLUGIN_NAME/.claude-plugin/plugin.json"
 
-# Extract version from first ## N.N.N line
-VERSION=$(grep -m1 '^## [0-9]' "$CHANGELOG" | sed 's/^## //')
+# Extract version from Cargo.toml (authoritative source)
+VERSION=$(grep -m1 '^version' "$CARGO_TOML" | sed 's/.*"\(.*\)".*/\1/')
 if [ -z "$VERSION" ]; then
     echo "sync-version: could not extract version from CHANGELOG.md"
     exit 1
