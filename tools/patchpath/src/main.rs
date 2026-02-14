@@ -16,17 +16,20 @@ use std::path::{Path, PathBuf};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() < 2 {
+    if args.len() < 2 || args.iter().any(|a| a == "--help" || a == "-h") {
+        eprintln!("Resolve the correct mock.patch() target for a Python symbol");
+        eprintln!();
         eprintln!("Usage: patchpath <symbol_name> [module_under_test]");
         eprintln!();
-        eprintln!("  symbol_name        The function/class name to patch");
-        eprintln!("  module_under_test  The dotted module path being tested (optional)");
+        eprintln!("Traces Python import chains to find where a name is looked up (not where it's");
+        eprintln!("defined). Use when writing mock.patch() in tests to avoid the common mistake");
+        eprintln!("of patching at the source module instead of the importing module.");
         eprintln!();
         eprintln!("Examples:");
         eprintln!("  patchpath exchange_code_for_tokens app.routes.callback");
         eprintln!("  patchpath DynamoDBSessionBackend app.session");
         eprintln!("  patchpath DuckDBConnector  # scan: show all importers");
-        std::process::exit(1);
+        std::process::exit(0);
     }
 
     let symbol = &args[1];
@@ -160,71 +163,72 @@ fn parse_imports(content: &str, module_path: &str, entries: &mut Vec<ImportEntry
         // Handle: from X import Y, Z
         // Handle: from X import (Y, Z)  (possibly multi-line)
         if let Some(rest) = trimmed.strip_prefix("from ")
-            && let Some((source, import_part)) = rest.split_once(" import ") {
-                let source = source.trim();
+            && let Some((source, import_part)) = rest.split_once(" import ")
+        {
+            let source = source.trim();
 
-                // Resolve relative imports
-                let resolved_source = resolve_relative_import(source, module_path);
+            // Resolve relative imports
+            let resolved_source = resolve_relative_import(source, module_path);
 
-                // Collect full import text (may span multiple lines with parens)
-                let mut full_import = import_part.to_string();
-                if full_import.contains('(') && !full_import.contains(')') {
-                    // Multi-line import
-                    for continuation in lines.by_ref() {
-                        full_import.push(' ');
-                        full_import.push_str(continuation.trim());
-                        if continuation.contains(')') {
-                            break;
-                        }
+            // Collect full import text (may span multiple lines with parens)
+            let mut full_import = import_part.to_string();
+            if full_import.contains('(') && !full_import.contains(')') {
+                // Multi-line import
+                for continuation in lines.by_ref() {
+                    full_import.push(' ');
+                    full_import.push_str(continuation.trim());
+                    if continuation.contains(')') {
+                        break;
                     }
-                }
-
-                // Also handle backslash continuation
-                while full_import.ends_with('\\') {
-                    full_import.pop(); // remove backslash
-                    if let Some(continuation) = lines.next() {
-                        full_import.push(' ');
-                        full_import.push_str(continuation.trim());
-                    }
-                }
-
-                // Parse symbols from "Y, Z as alias, W"
-                let clean = full_import
-                    .trim_start_matches('(')
-                    .trim_end_matches(')')
-                    .trim();
-
-                if clean == "*" {
-                    // Star import — we can't resolve individual symbols
-                    continue;
-                }
-
-                for item in clean.split(',') {
-                    let item = item.trim();
-                    if item.is_empty() {
-                        continue;
-                    }
-                    // Handle "X as Y" — the imported name is Y, but the symbol is X
-                    let _symbol = if let Some((original, _alias)) = item.split_once(" as ") {
-                        original.trim()
-                    } else {
-                        item
-                    };
-
-                    // The name in the importing module's namespace
-                    let local_name = if let Some((_original, alias)) = item.split_once(" as ") {
-                        alias.trim()
-                    } else {
-                        item
-                    };
-
-                    entries.push(ImportEntry {
-                        symbol: local_name.to_string(),
-                        source_module: resolved_source.clone(),
-                        importing_module: module_path.to_string(),
-                    });
                 }
             }
+
+            // Also handle backslash continuation
+            while full_import.ends_with('\\') {
+                full_import.pop(); // remove backslash
+                if let Some(continuation) = lines.next() {
+                    full_import.push(' ');
+                    full_import.push_str(continuation.trim());
+                }
+            }
+
+            // Parse symbols from "Y, Z as alias, W"
+            let clean = full_import
+                .trim_start_matches('(')
+                .trim_end_matches(')')
+                .trim();
+
+            if clean == "*" {
+                // Star import — we can't resolve individual symbols
+                continue;
+            }
+
+            for item in clean.split(',') {
+                let item = item.trim();
+                if item.is_empty() {
+                    continue;
+                }
+                // Handle "X as Y" — the imported name is Y, but the symbol is X
+                let _symbol = if let Some((original, _alias)) = item.split_once(" as ") {
+                    original.trim()
+                } else {
+                    item
+                };
+
+                // The name in the importing module's namespace
+                let local_name = if let Some((_original, alias)) = item.split_once(" as ") {
+                    alias.trim()
+                } else {
+                    item
+                };
+
+                entries.push(ImportEntry {
+                    symbol: local_name.to_string(),
+                    source_module: resolved_source.clone(),
+                    importing_module: module_path.to_string(),
+                });
+            }
+        }
     }
 }
 

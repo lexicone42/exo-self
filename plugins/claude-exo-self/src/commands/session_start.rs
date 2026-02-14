@@ -221,6 +221,12 @@ pub fn run() {
         ));
     }
 
+    // Discover workshop tools in ~/.claude/bin/
+    let tools_section = discover_workshop_tools();
+    if !tools_section.is_empty() {
+        sections.push(tools_section);
+    }
+
     let context = sections.join("\n\n");
     hook_io::hook_output("SessionStart", &context);
 }
@@ -266,4 +272,105 @@ fn merge_plugin_contexts(cfg: &Config) -> String {
     }
 
     merged
+}
+
+/// Discover tools in ~/.claude/bin/ and build a context section describing them.
+/// Each tool is expected to support `--help`; we capture its description line.
+fn discover_workshop_tools() -> String {
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => return String::new(),
+    };
+    let bin_dir = std::path::PathBuf::from(&home).join(".claude/bin");
+
+    let Ok(entries) = std::fs::read_dir(&bin_dir) else {
+        return String::new();
+    };
+
+    let skip = ["exo-self"]; // exo-self is the plugin itself, not a workshop tool
+
+    let mut tools: Vec<(String, String)> = Vec::new();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+
+        // Skip exo-self and non-executable / hidden files
+        if skip.contains(&name) || name.starts_with('.') {
+            continue;
+        }
+
+        // Get description from --help (first non-empty line, timeout 2s)
+        let description = get_tool_description(&path);
+        tools.push((name.to_string(), description));
+    }
+
+    if tools.is_empty() {
+        return String::new();
+    }
+
+    tools.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut lines = Vec::new();
+    lines.push("### Workshop Tools (~/.claude/bin/)".to_string());
+    lines.push(String::new());
+    lines.push(
+        "These are Rust CLI tools built from friction patterns. Use them proactively:".to_string(),
+    );
+
+    for (name, desc) in &tools {
+        lines.push(format!("- **`{name}`** — {desc}"));
+    }
+
+    lines.push(String::new());
+    lines.push(
+        "Run any tool with `~/.claude/bin/<name>` or `~/.claude/bin/<name> --help` for full usage."
+            .to_string(),
+    );
+
+    lines.join("\n")
+}
+
+fn get_tool_description(path: &std::path::Path) -> String {
+    let output = std::process::Command::new(path)
+        .arg("--help")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
+
+    let Ok(output) = output else {
+        return "no description available".into();
+    };
+
+    // Try stdout first, then stderr (some tools print help to stderr)
+    let text = if !output.stdout.is_empty() {
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    } else {
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    };
+
+    // Extract the description: usually the first non-empty, non-usage line
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("Usage:")
+            || trimmed.starts_with("usage:")
+            || trimmed.starts_with("Options:")
+            || trimmed.starts_with('-')
+        {
+            continue;
+        }
+        // Return first meaningful line, truncated
+        let desc = if trimmed.len() > 120 {
+            format!("{}...", &trimmed[..117])
+        } else {
+            trimmed.to_string()
+        };
+        return desc;
+    }
+
+    "no description available".into()
 }

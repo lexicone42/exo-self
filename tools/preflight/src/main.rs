@@ -13,6 +13,20 @@ struct Project {
 }
 
 fn main() -> ExitCode {
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        eprintln!("Pre-commit preflight: run formatters + linters + auto-fix + stage changes");
+        eprintln!();
+        eprintln!("Usage: preflight [--dry-run]");
+        eprintln!();
+        eprintln!(
+            "Detects Python (ruff), Rust (cargo fmt + clippy), and Node (biome/prettier/eslint)"
+        );
+        eprintln!("projects and runs fixers automatically. Stages modified files so the next git");
+        eprintln!("commit lands clean on the first try. Use before committing to avoid the");
+        eprintln!("fail-restage-recommit cycle.");
+        return ExitCode::SUCCESS;
+    }
+
     let dry_run = std::env::args().any(|a| a == "--dry-run" || a == "-n");
 
     let projects = detect_projects();
