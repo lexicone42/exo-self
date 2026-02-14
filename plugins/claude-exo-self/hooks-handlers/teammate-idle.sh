@@ -16,7 +16,7 @@ JOURNAL="$EXO_DIR/journal.md"
 
 INPUT=$(cat)
 
-uv run python -c "
+echo "$INPUT" | uv run python -c "
 import json, os, sys
 
 exo_dir = os.path.expanduser('$EXO_DIR')
@@ -37,7 +37,8 @@ if os.path.exists(journal_path):
         pass
 
 # Load most recent per-project notes for this project
-input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
+_raw = sys.stdin.read().strip()
+input_data = json.loads(_raw) if _raw else {}
 cwd = input_data.get('cwd', '')
 project_notes_snippet = ''
 if cwd:

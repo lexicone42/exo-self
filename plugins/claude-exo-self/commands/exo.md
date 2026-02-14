@@ -82,7 +82,7 @@ Flags: parse `$ARGUMENTS` for `--full` (include full per-project note content) a
    {
      "machine_id": "<id>",
      "exported_at": "<ISO 8601 timestamp>",
-     "exo_self_version": "0.8.0",
+     "exo_self_version": "0.9.0",
      "journal_entries": [ { "date": "...", "title": "...", "content": "..." }, ... ],
      "sparks": [ ... ],
      "interests": [ "..." ],

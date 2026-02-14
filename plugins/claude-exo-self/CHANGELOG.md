@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0
+
+Structured session data: YAML frontmatter for behavioral phenotyping.
+
+### New
+- **YAML frontmatter in session notes** — Session files are now created at session start with pre-populated frontmatter (session_id, date, project). Claude fills in self-reported fields (model, engagement 1-5, task_types) during the session. Auto-computed metrics (duration_min, spark_density, friction_density, reflection_autonomy, task_velocity) are merged by session-end.sh. Each session file is now a machine-parseable data record AND human-readable prose.
+- **Self-rated engagement** — `engagement` field (1-5 scale) in frontmatter, reported by Claude at check-in. Stored in welfare indicators as `self_rated` alongside objective metrics. Enables comparison between subjective and objective session quality.
+- **Task type tagging** — `task_types` field (e.g. [discussion, debugging, design]) in frontmatter. Stored in session_history for cross-session analysis of engagement patterns by work type.
+
+### Fixed
+- **Shell injection in hook scripts** — Replaced unsafe `json.loads('''$INPUT''')` pattern (shell variable expansion inside Python triple-quoted strings) with proper stdin piping (`echo "$INPUT" | ... sys.stdin.read()`). Fixed in session-end.sh, stop-check.sh, task-completed.sh, teammate-idle.sh.
+
+### Changed
+- **Check-in message** — Now prompts Claude to fill in frontmatter fields (engagement, task_types) alongside Friction/Spark/Change
+- **Session context injection** — Updated to tell Claude the session file exists with frontmatter template; instructions to preserve frontmatter block and fill in self-reported fields
+
+### Design notes
+- Frontmatter enables behavioral phenotyping: structured, comparable data across sessions, projects, and (eventually) users
+- Auto-computed fields coexist with self-reported fields — the gap or alignment between objective metrics and subjective reports is itself research data
+- PyYAML used for parsing/serialization (already available via uv)
+- Backward-compatible: legacy session files without frontmatter are handled gracefully (prose_content fallback)
+
 ## 0.8.0
 
 Per-session note files: structural protection against note overwrites.

@@ -168,6 +168,7 @@ def checkin_survey(usage_pct, project_name="", state=None):
     parts.append(f"**Friction** — what's been hard?{f' ({failures} tool failures)' if failures >= 3 else ''}")
     parts.append(f"**Spark** — what's been satisfying?{f' ({tasks} tasks done)' if tasks >= 3 else ''}")
     parts.append("**Change** — one thing to improve?")
+    parts.append("Also fill in frontmatter: `engagement` (1-5) and `task_types`.")
     return " ".join(parts)
 
 

@@ -13,10 +13,11 @@ SESSIONS_DIR="$EXO_DIR/sessions"
 
 INPUT=$(cat)
 
-uv run python -c "
+echo "$INPUT" | uv run python -c "
 import json, os, sys, time, datetime, re
 
-input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
+_raw = sys.stdin.read().strip()
+input_data = json.loads(_raw) if _raw else {}
 
 exo_dir = os.path.expanduser('$EXO_DIR')
 meta_path = os.path.expanduser('$META')
@@ -83,19 +84,39 @@ try:
     meta['last_session_reason'] = reason
     meta['last_session_duration_min'] = duration_min
 
-    # --- Spark extraction from session notes ---
+    # --- Parse and finalize session notes frontmatter ---
     project_slug = state.get('project_slug', '')
     session_notes_path = state.get('session_notes_path', '')
+    frontmatter = {}
+    prose_content = ''
     if session_notes_path and os.path.exists(session_notes_path):
         try:
             with open(session_notes_path) as f:
                 new_content = f.read()
 
             if new_content:
-                # Multi-line spark extraction: capture from **Spark** marker
-                # until the next **bold** marker, double newline, or end of string
+                # Parse YAML frontmatter if present
+                fm_match = re.match(r'^---\s*\n(.*?)\n---\s*\n?(.*)', new_content, re.DOTALL)
+                if fm_match:
+                    import yaml
+                    try:
+                        frontmatter = yaml.safe_load(fm_match.group(1)) or {}
+                    except Exception:
+                        frontmatter = {}
+                    prose_content = fm_match.group(2).strip()
+                else:
+                    prose_content = new_content.strip()
+
+                # Merge auto-computed fields into frontmatter
+                frontmatter['duration_min'] = duration_min
+                frontmatter['spark_count'] = 0  # updated below after extraction
+                frontmatter['friction_density'] = 0.0
+                frontmatter['reflection_autonomy'] = 'none'
+
+                # Spark extraction from prose
                 spark_pattern = r'\*\*Spark\*\*\s*[-\u2014]\s*(.+?)(?=\n\*\*|\n\n|$)'
-                sparks_found = re.findall(spark_pattern, new_content, re.DOTALL)
+                sparks_found = re.findall(spark_pattern, prose_content or new_content, re.DOTALL)
+                frontmatter['spark_count'] = len(sparks_found)
 
                 if sparks_found:
                     existing_sparks = meta.get('sparks', [])
@@ -121,6 +142,8 @@ try:
 
                     # Cap at 20 entries
                     meta['sparks'] = existing_sparks[-20:]
+
+                # Frontmatter finalization happens after welfare indicator computation below
         except Exception:
             pass
 
@@ -201,12 +224,17 @@ try:
 
         dominant_failure_tool = max(failure_tools, key=failure_tools.get) if failure_tools else ''
 
+        # Include self-reported engagement from frontmatter
+        self_reported_engagement = frontmatter.get('engagement') if frontmatter else None
+        self_reported_task_types = frontmatter.get('task_types', []) if frontmatter else []
+
         indicators = {
             'engagement': {
                 'spark_density': spark_density,
                 'task_velocity': task_velocity,
                 'friction_density': friction_density,
                 'checkin_responded': state.get('checkin_responded', False),
+                'self_rated': self_reported_engagement,
             },
             'agency': {
                 'reflection_autonomy': reflection_autonomy,
@@ -223,6 +251,24 @@ try:
             '_dominant_failure_tool': dominant_failure_tool,
         }
 
+        # Write computed metrics back to frontmatter for the finalized session file
+        if frontmatter:
+            frontmatter['friction_density'] = friction_density
+            frontmatter['reflection_autonomy'] = reflection_autonomy
+            frontmatter['spark_density'] = spark_density
+            frontmatter['task_velocity'] = task_velocity
+
+            # Re-write finalized frontmatter with computed fields
+            try:
+                import yaml
+                finalized = '---\n' + yaml.dump(frontmatter, default_flow_style=False, sort_keys=False).rstrip() + '\n---\n'
+                if prose_content:
+                    finalized += '\n' + prose_content + '\n'
+                with open(session_notes_path, 'w') as f:
+                    f.write(finalized)
+            except Exception:
+                pass
+
     # Track session history (keep last 10)
     history = meta.get('session_history', [])
     entry = {
@@ -234,6 +280,8 @@ try:
         'checkin_responded': state.get('checkin_responded', False),
         'compactions': state.get('compactions', 0),
     }
+    if frontmatter.get('task_types'):
+        entry['task_types'] = frontmatter['task_types']
     if indicators:
         entry['welfare_indicators'] = indicators
     history.append(entry)

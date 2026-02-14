@@ -15,10 +15,11 @@ SESSIONS_DIR="$EXO_DIR/sessions"
 
 INPUT=$(cat)
 
-uv run python -c "
+echo "$INPUT" | uv run python -c "
 import json, os, sys, time
 
-input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
+_raw = sys.stdin.read().strip()
+input_data = json.loads(_raw) if _raw else {}
 
 session_id = input_data.get('session_id', '')
 if not session_id:

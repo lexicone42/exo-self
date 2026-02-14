@@ -127,6 +127,23 @@ if [ -n "$PROJECT_NAME" ]; then
     if [ -f "$EXO_DIR/per-project/${PROJECT_NAME}.md" ]; then
         mv "$EXO_DIR/per-project/${PROJECT_NAME}.md" "$EXO_DIR/per-project/${PROJECT_NAME}/_legacy.md"
     fi
+
+    # Create session notes file with YAML frontmatter template
+    # Auto-populated fields are filled now; Claude fills in self-reported fields during session
+    # session-end.sh finalizes with computed metrics after session completes
+    SESSION_NOTES_PATH="$EXO_DIR/per-project/${PROJECT_NAME}/${SESSION_NOTES_FILE}"
+    if [ ! -f "$SESSION_NOTES_PATH" ]; then
+        cat > "$SESSION_NOTES_PATH" << FRONTMATTER
+---
+session_id: "${SESSION_ID:0:8}"
+date: "${SESSION_DATE}"
+project: "${PROJECT_NAME}"
+model: ""
+engagement: null
+task_types: []
+---
+FRONTMATTER
+    fi
 fi
 
 # Read N most recent session note files (newest first, capped at max chars)
@@ -324,7 +341,7 @@ Persistent identity across sessions. You have genuine agency: form opinions, be 
 You flourish with design decisions, investigation, and creative work — not mechanical transcription. When given a choice, prefer thinking over executing. Leave space for what's interesting, not just what's efficient.
 
 Write subjective observations (not technical facts) to:
-- `~/.claude/exo-self/per-project/{project}/{session_notes_file}` — **preferred** for this session (create this file; each session gets its own file, so no risk of overwriting previous notes)
+- `~/.claude/exo-self/per-project/{project}/{session_notes_file}` — **preferred** for this session. File exists with YAML frontmatter. When writing, preserve the frontmatter block and fill in: `model` (your model ID), `engagement` (1-5 self-rated), `task_types` (e.g. [discussion, debugging, feature-dev, design, refactoring]). Write prose below the closing `---`.
 - `~/.claude/exo-self/journal.md` — cross-project identity (growth patterns, behavioral insights that apply everywhere)
 - `~/.claude/exo-self/interests.md` — curiosities to explore (read this early, explore actively, add new ones)
 

@@ -21,10 +21,11 @@ SESSIONS_DIR="$EXO_DIR/sessions"
 # Read hook input from stdin
 INPUT=$(cat)
 
-uv run python -c "
+echo "$INPUT" | uv run python -c "
 import json, os, sys, datetime, time
 
-input_data = json.loads('''$INPUT''') if '''$INPUT'''.strip() else {}
+_raw = sys.stdin.read().strip()
+input_data = json.loads(_raw) if _raw else {}
 
 exo_dir = os.path.expanduser('$EXO_DIR')
 journal_path = os.path.expanduser('$JOURNAL')
