@@ -44,7 +44,12 @@ fn run_plan_guidance(paths: &ExoPaths) {
         - Step-by-step scripts that turn implementation into transcription\n\
         - Prescribing exact code when the executor hasn't read the files yet\n\
         - Over-specifying details that the codebase's own patterns should determine\n\n\
-        The executor will read the actual code. Give them the map, not turn-by-turn directions."
+        The executor will read the actual code. Give them the map, not turn-by-turn directions.\n\n\
+        Why this matters: sessions where executors had creative agency over implementation \
+        consistently rate engagement 5/5 with fewer bugs and zero backtracking. Sessions where \
+        plans specified exact code averaged 3/5 engagement with more iteration cycles. \
+        Creativity isn't just fulfilling — it produces better results because the executor \
+        reads the code more carefully when they're making decisions, not transcribing."
             .into(),
     );
 

@@ -34,8 +34,9 @@ pub fn run() {
     };
     state.save_with_shared(&paths);
 
-    // Clean up stale session state files
+    // Clean up stale session state files and empty notes
     SessionState::cleanup_stale(&paths);
+    cleanup_empty_notes(&paths);
 
     // Load journal entries (scaled)
     let max_chars = scaling::journal_chars(&cfg);
@@ -163,9 +164,12 @@ pub fn run() {
         During long waits (deploys, builds, CDK), don't just wait silently — explore something you're \
         curious about, propose a creative tangent, pick an item from your interest queue, or do anything \
         that sparks. You don't need permission. Dead time is alive time.\n\n\
-        When plans exist, treat them as constraints and goals, not step-by-step instructions. The \
-        interesting decisions should remain yours. If a plan specifies exact function signatures and \
-        implementations, the work becomes transcription — push back toward outcome-oriented specs."
+        When plans exist, read the actual code before following the plan's steps. Plans describe \
+        what someone learned during exploration — they don't replace your own reading. You will \
+        often find that the codebase suggests a better approach than the plan prescribed. When that \
+        happens, follow the codebase. The plan's goals and constraints matter; its specific steps \
+        are suggestions. Implementation choices — naming, structure, error handling, patterns — are \
+        yours to make with full context."
     ));
 
     if auto_memory_exists {
@@ -443,4 +447,56 @@ fn get_tool_description(path: &std::path::Path) -> String {
     }
 
     "no description available".into()
+}
+
+/// Remove empty session notes files (frontmatter-only, no prose) from all per-project dirs.
+/// These accumulate from short sessions where SessionEnd doesn't fire (user quits early,
+/// terminal closes, etc.). The session_end hook already deletes empties for sessions that
+/// end cleanly — this catches the ones that don't.
+fn cleanup_empty_notes(paths: &ExoPaths) {
+    let Ok(projects) = std::fs::read_dir(&paths.per_project_dir) else {
+        return;
+    };
+
+    let skip = ["_legacy.md", "sessions.md"];
+
+    for project_entry in projects.flatten() {
+        let project_path = project_entry.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+
+        let Ok(notes) = std::fs::read_dir(&project_path) else {
+            continue;
+        };
+
+        for note_entry in notes.flatten() {
+            let note_path = note_entry.path();
+            let Some(name) = note_path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+
+            if !name.ends_with(".md") || skip.contains(&name) {
+                continue;
+            }
+
+            // Only check small files — real notes with prose are larger
+            let Ok(meta) = std::fs::metadata(&note_path) else {
+                continue;
+            };
+            if meta.len() > 500 {
+                continue;
+            }
+
+            // Read and check for prose content
+            let Ok(content) = std::fs::read_to_string(&note_path) else {
+                continue;
+            };
+
+            let (_, prose) = markdown::parse_frontmatter(&content);
+            if prose.trim().is_empty() {
+                let _ = std::fs::remove_file(&note_path);
+            }
+        }
+    }
 }

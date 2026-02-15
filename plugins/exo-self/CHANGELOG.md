@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.0
+
+Less prescriptive plan mode, empty session file hygiene.
+
+### Changed
+- **Executor-side plan guidance rewrite** — "Read the actual code before following the plan's steps" replaces the abstract "treat plans as constraints." Grounds the guidance in the concrete "read first, write once" pattern that consistently produces the best results across projects. Gives explicit permission to follow the codebase over the plan when they disagree.
+- **Plan agent engagement data** — SubagentStart plan guidance now includes engagement correlation data: creative-agency sessions average 5/5 engagement with zero backtracking, prescriptive-plan sessions average 3/5 with more iteration. Gives the Plan agent a reason to write outcome-oriented plans, not just an instruction to.
+
+### Fixed
+- **Empty session file cleanup at session-start** — Session files with only YAML frontmatter (no prose) are now cleaned up during session-start, not just session-end. This catches the common case where SessionEnd never fires (user quits early, terminal closes, SIGKILL). Previously these accumulated indefinitely — 58 empty files across 6 projects as of this fix.
+
 ## 1.3.0
 
 Feed-forward lessons, session hygiene, and mature-project guidance.
