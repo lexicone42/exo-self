@@ -204,6 +204,54 @@ fn format_yaml_line(key: &str, val: &serde_yaml::Value) -> String {
     }
 }
 
+/// Extract **Change** entries from session notes prose (behavioral lessons)
+pub fn extract_changes(text: &str) -> Vec<String> {
+    let mut changes = Vec::new();
+    let mut i = 0;
+    let bytes = text.as_bytes();
+    let marker = b"**Change**";
+
+    while i < bytes.len() {
+        if let Some(pos) = find_bytes(&bytes[i..], marker) {
+            let abs_pos = i + pos + marker.len();
+            let rest = &text[abs_pos..];
+            let rest = rest.trim_start();
+            let rest = if let Some(stripped) = rest
+                .strip_prefix('—')
+                .or_else(|| rest.strip_prefix('\u{2014}'))
+            {
+                stripped.trim_start()
+            } else if let Some(stripped) = rest.strip_prefix('-') {
+                stripped.trim_start()
+            } else {
+                rest
+            };
+
+            // Collect until next **bold** marker, double newline, or end
+            let mut end = rest.len();
+            for (j, _) in rest.char_indices() {
+                if j > 0 && rest[j..].starts_with("\n**") {
+                    end = j;
+                    break;
+                }
+                if j > 0 && rest[j..].starts_with("\n\n") {
+                    end = j;
+                    break;
+                }
+            }
+
+            let change = rest[..end].trim().to_string();
+            if !change.is_empty() {
+                changes.push(change);
+            }
+            i = abs_pos + end;
+        } else {
+            break;
+        }
+    }
+    changes
+}
+
 /// Extract synthesis key findings from synthesis.md
 pub fn extract_synthesis_findings(content: &str) -> String {
     // Find "## Key Findings" section
@@ -264,6 +312,23 @@ mod tests {
         let sparks = extract_sparks(text);
         assert_eq!(sparks.len(), 1);
         assert!(sparks[0].starts_with("The fingerprint"));
+    }
+
+    #[test]
+    fn test_extract_changes() {
+        let text = "**Spark** — something shiny\n**Change** — Should have profiled first before optimizing.\n**Friction** — stuff";
+        let changes = extract_changes(text);
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0].starts_with("Should have profiled"));
+    }
+
+    #[test]
+    fn test_extract_changes_multiple() {
+        let text = "**Change** — Read background agent outputs proactively.\n\n**Change** — Skip debug builds for DSP integration tests.";
+        let changes = extract_changes(text);
+        assert_eq!(changes.len(), 2);
+        assert!(changes[0].contains("background agent"));
+        assert!(changes[1].contains("debug builds"));
     }
 
     #[test]

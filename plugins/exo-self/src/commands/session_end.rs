@@ -114,6 +114,45 @@ pub fn run() {
         }
     }
 
+    // Extract **Change** items from prose → store as lessons
+    let changes_found = if !prose_content.is_empty() {
+        markdown::extract_changes(&prose_content)
+    } else {
+        Vec::new()
+    };
+
+    if !changes_found.is_empty() {
+        let project_slug = &state.project_slug;
+        let sid = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+
+        for change_text in &changes_found {
+            let dedup_key = change_text[..change_text.len().min(100)].to_lowercase();
+            let is_dup = meta
+                .lessons
+                .iter()
+                .any(|l| l.text[..l.text.len().min(100)].to_lowercase() == dedup_key);
+            if !is_dup {
+                meta.lessons.push(Lesson {
+                    text: change_text.clone(),
+                    project: project_slug.clone(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
+                    session_id: sid.to_string(),
+                });
+            }
+        }
+        // Cap at 15
+        let len = meta.lessons.len();
+        if len > 15 {
+            meta.lessons = meta.lessons.split_off(len - 15);
+        }
+    }
+
     // --- Welfare indicator computation ---
     let mut indicators: Option<WelfareIndicators> = None;
 
@@ -229,6 +268,11 @@ pub fn run() {
 
         // Store task_types in the history entry below
         let _ = self_reported_task_types; // used below
+    }
+
+    // Delete empty session files (only frontmatter, no prose)
+    if !state.session_notes_path.is_empty() && prose_content.trim().is_empty() {
+        let _ = std::fs::remove_file(&state.session_notes_path);
     }
 
     // Track session history (keep last 10)

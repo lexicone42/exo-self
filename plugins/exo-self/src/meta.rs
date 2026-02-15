@@ -16,6 +16,7 @@ pub struct Meta {
     pub last_session_duration_min: Option<u32>,
     pub session_history: Vec<SessionHistoryEntry>,
     pub sparks: Vec<Spark>,
+    pub lessons: Vec<Lesson>,
     pub welfare_summary: Option<WelfareSummary>,
 }
 
@@ -38,6 +39,14 @@ pub struct SessionHistoryEntry {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Spark {
+    pub text: String,
+    pub project: String,
+    pub timestamp: String,
+    pub session_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Lesson {
     pub text: String,
     pub project: String,
     pub timestamp: String,

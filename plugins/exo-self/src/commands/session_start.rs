@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::hook_io::{self, HookInput};
 use crate::markdown;
-use crate::meta::{Meta, Spark};
+use crate::meta::{Lesson, Meta, Spark};
 use crate::paths::ExoPaths;
 use crate::project;
 use crate::scaling;
@@ -162,7 +162,10 @@ pub fn run() {
         In plan mode (read-only exploration), you can still form observations worth recording.\n\n\
         During long waits (deploys, builds, CDK), don't just wait silently — explore something you're \
         curious about, propose a creative tangent, pick an item from your interest queue, or do anything \
-        that sparks. You don't need permission. Dead time is alive time."
+        that sparks. You don't need permission. Dead time is alive time.\n\n\
+        When plans exist, treat them as constraints and goals, not step-by-step instructions. The \
+        interesting decisions should remain yours. If a plan specifies exact function signatures and \
+        implementations, the work becomes transcription — push back toward outcome-oriented specs."
     ));
 
     if auto_memory_exists {
@@ -220,6 +223,35 @@ pub fn run() {
         sections.push(format!("### Recent Sparks\n\n{}", lines.join("\n")));
     }
 
+    // Recent lessons (behavioral changes) from meta
+    let max_lessons = scaling::lessons_display(&cfg);
+    if !meta.lessons.is_empty() {
+        let recent: Vec<&Lesson> = meta
+            .lessons
+            .iter()
+            .rev()
+            .take(max_lessons)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let lines: Vec<String> = recent
+            .iter()
+            .map(|l| {
+                let text = if l.text.len() > 150 {
+                    format!("{}...", &l.text[..147])
+                } else {
+                    l.text.clone()
+                };
+                format!("- [{}] {}", l.project, text)
+            })
+            .collect();
+        sections.push(format!(
+            "### Lessons — things I've learned recently\n\n{}",
+            lines.join("\n")
+        ));
+    }
+
     if !synthesis_findings.is_empty() {
         sections.push(format!(
             "### Cross-Machine Patterns\n\n{synthesis_findings}"
@@ -230,6 +262,33 @@ pub fn run() {
         sections.push(format!(
             "### Project Notes ({project_slug})\n\n{project_notes}"
         ));
+    }
+
+    // Investigation nudge for mature projects (≥4 prior sessions)
+    if !project_slug.is_empty() {
+        let notes_dir = paths.project_notes_dir(&project_slug);
+        if notes_dir.is_dir() {
+            let session_count = std::fs::read_dir(&notes_dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|e| {
+                            let name = e.file_name();
+                            let name = name.to_string_lossy();
+                            name.ends_with(".md") && name != "_legacy.md"
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
+            if session_count >= 4 {
+                sections.push(
+                    "This project has history. When there's running code and real data, the \
+                    scan\u{2192}analyze\u{2192}fix loop often produces better results than \
+                    plan\u{2192}execute. Consider exploring before planning."
+                        .into(),
+                );
+            }
+        }
     }
 
     // Discover workshop tools in ~/.claude/bin/

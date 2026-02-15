@@ -37,6 +37,11 @@ pub fn interests_items(cfg: &Config) -> usize {
     }
 }
 
+/// Scaled max lessons display (default 5, scales up to 15)
+pub fn lessons_display(cfg: &Config) -> usize {
+    (5.0 * scale_factor(cfg)).min(15.0).max(5.0) as usize
+}
+
 /// Scaled max sparks display (default 5, scales up to 20)
 pub fn sparks_display(cfg: &Config) -> usize {
     if cfg.max_sparks_display == 5 {
