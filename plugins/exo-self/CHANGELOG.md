@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0
+
+Feed-forward lessons, session hygiene, and mature-project guidance.
+
+### New
+- **Feed-forward lessons** — `**Change**` entries in session notes are extracted at session-end, deduplicated, stored in `meta.json` (cap: 15), and displayed as "Lessons — things I've learned recently" at session-start. Behavioral insights now survive across sessions automatically.
+- **Session hygiene** — Empty session files (frontmatter-only, no prose) are deleted at session-end, keeping the per-project directory clean.
+- **Investigation nudge** — Projects with 4+ prior sessions get a prompt suggesting `scan→analyze→fix` over `plan→execute`, encouraging exploration before planning in mature codebases.
+- **Plan-mode guidance** — SessionStart context now includes guidance to treat plans as constraints and goals, not step-by-step instructions, pushing back against transcription-style work.
+
+### Technical
+- `Lesson` struct in meta.rs (text, project, timestamp, session_id)
+- `extract_changes()` in markdown.rs with unit tests for single and multiple Change markers
+- `lessons_display()` in scaling.rs — scaled display count (5–15) based on context window size
+
 ## 1.2.1
 
 Fix project identity for new projects.
