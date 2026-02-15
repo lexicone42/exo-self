@@ -1,3 +1,4 @@
+use crate::markdown;
 use crate::paths::ExoPaths;
 
 /// Derive a stable project slug from cwd.
@@ -54,10 +55,18 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
 
     let mut parts = Vec::new();
     let mut total = 0;
-    for fp in files.iter().take(5) {
+    for fp in &files {
+        if parts.len() >= 5 {
+            break;
+        }
         let text = std::fs::read_to_string(fp).unwrap_or_default();
         let text = text.trim().to_string();
         if text.is_empty() {
+            continue;
+        }
+        // Skip frontmatter-only files (no prose content)
+        let (_, prose) = markdown::parse_frontmatter(&text);
+        if prose.trim().is_empty() {
             continue;
         }
         if total + text.len() > max_chars {
