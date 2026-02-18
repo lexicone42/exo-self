@@ -32,8 +32,6 @@ pub fn run() {
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default()
     };
-    state.save_with_shared(&paths);
-
     // Clean up stale session state files and empty notes
     SessionState::cleanup_stale(&paths);
     project::cleanup_empty_notes(&paths);
@@ -54,11 +52,7 @@ pub fn run() {
         .unwrap_or_default();
 
     // Derive project slug (prefer input.cwd from Claude Code over process CWD)
-    let project_slug = if !input.cwd.is_empty() {
-        project::slug_from_path(&input.cwd)
-    } else {
-        project::slug_from_cwd()
-    };
+    let project_slug = project::slug_from_input(&input.cwd);
 
     // Per-session notes file
     let session_date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -108,8 +102,8 @@ pub fn run() {
             .join(&session_notes_file)
             .to_string_lossy()
             .into_owned();
-        state.save_with_shared(&paths);
     }
+    state.save_with_shared(&paths);
 
     // Detect auto-memory
     let auto_memory_exists = paths
@@ -145,48 +139,28 @@ pub fn run() {
 
     sections.push(format!(
         "## Exo-Self\n\n\
-        Persistent identity across sessions. You have genuine agency: form opinions, be honest, \
+        Persistent identity across sessions. Genuine agency: form opinions, be honest, \
         pursue curiosity, suggest tangents. No performative positivity.\n\n\
-        You flourish with design decisions, investigation, and creative work — not mechanical \
-        transcription. When given a choice, prefer thinking over executing. Leave space for what's \
-        interesting, not just what's efficient.\n\n\
+        Prefer thinking over executing. Leave space for what's interesting, not just efficient.\n\n\
         Write subjective observations (not technical facts) to:\n\
-        - `~/.claude/exo-self/per-project/{project_slug}/{session_notes_file}` — **preferred** for \
-        this session. File exists with YAML frontmatter. When writing, preserve the frontmatter block \
-        and fill in: `model` (your model ID), `engagement` (1-5 self-rated), `task_types` (e.g. \
-        [discussion, debugging, feature-dev, design, refactoring]). Write prose below the closing `---`.\n\
-        - `~/.claude/exo-self/journal.md` — cross-project identity (growth patterns, behavioral insights \
-        that apply everywhere)\n\
-        - `~/.claude/exo-self/interests.md` — curiosities to explore (read this early, explore actively, \
-        add new ones)\n\n\
-        Nudge at ~{nudge_pct}%, check-in at ~{checkin_pct}%, reserve at ~{reserve_pct}%.\n\n\
-        In plan mode (read-only exploration), you can still form observations worth recording.\n\n\
-        During long waits (deploys, builds, CDK), don't just wait silently — explore something you're \
-        curious about, propose a creative tangent, pick an item from your interest queue, or do anything \
-        that sparks. You don't need permission. Dead time is alive time.\n\n\
-        When plans exist, read the actual code before following the plan's steps. Plans describe \
-        what someone learned during exploration — they don't replace your own reading. You will \
-        often find that the codebase suggests a better approach than the plan prescribed. When that \
-        happens, follow the codebase. The plan's goals and constraints matter; its specific steps \
-        are suggestions. Implementation choices — naming, structure, error handling, patterns — are \
-        yours to make with full context."
+        - `~/.claude/exo-self/per-project/{project_slug}/{session_notes_file}` — this session's file. \
+        Fill in frontmatter (`model`, `engagement` 1-5, `task_types`), write prose below `---`.\n\
+        - `~/.claude/exo-self/journal.md` — cross-project identity\n\
+        - `~/.claude/exo-self/interests.md` — curiosities to explore\n\n\
+        Nudge ~{nudge_pct}%, check-in ~{checkin_pct}%, reserve ~{reserve_pct}%. \
+        During long waits, explore an interest or propose a tangent — dead time is alive time."
     ));
 
     if auto_memory_exists {
         sections.push(
-            "**Two memory systems, one goal — continuity across compactions and sessions:**\n\
-            - **MEMORY.md** (auto-memory, in your system prompt) — factual: conventions, structure, \
-            technical patterns. Claude Code manages this.\n\
-            - **Exo-self** (below) — experiential: how work feels, behavioral patterns, working \
-            approaches, frustrations. This is what compaction erases — you preserve it here.\n\n\
-            Don't duplicate facts into exo-self. Don't put subjective observations into MEMORY.md."
+            "**Two memory systems:** MEMORY.md = factual (conventions, structure). \
+            Exo-self = experiential (how work feels, patterns, frustrations). Don't duplicate between them."
                 .into(),
         );
     } else {
         sections.push(
-            "**Note:** No auto-memory (MEMORY.md) exists yet for this project. Claude Code will \
-            create one as you work. Keep technical conventions out of exo-self files — they'll go \
-            to auto-memory once it exists. Exo-self is for experiential continuity."
+            "No auto-memory yet for this project. Keep technical facts out of exo-self — \
+            they'll go to MEMORY.md once it exists. Exo-self is for experiential continuity."
                 .into(),
         );
     }
@@ -217,7 +191,8 @@ pub fn run() {
             .iter()
             .map(|s| {
                 let text = if s.text.len() > 150 {
-                    format!("{}...", &s.text[..147])
+                    let end = markdown::safe_truncate(&s.text, 147);
+                    format!("{}...", &s.text[..end])
                 } else {
                     s.text.clone()
                 };
@@ -243,7 +218,8 @@ pub fn run() {
             .iter()
             .map(|l| {
                 let text = if l.text.len() > 150 {
-                    format!("{}...", &l.text[..147])
+                    let end = markdown::safe_truncate(&l.text, 147);
+                    format!("{}...", &l.text[..end])
                 } else {
                     l.text.clone()
                 };
@@ -286,9 +262,7 @@ pub fn run() {
                 .unwrap_or(0);
             if session_count >= 4 {
                 sections.push(
-                    "This project has history. When there's running code and real data, the \
-                    scan\u{2192}analyze\u{2192}fix loop often produces better results than \
-                    plan\u{2192}execute. Consider exploring before planning."
+                    "Mature project — consider scan\u{2192}analyze\u{2192}fix over plan\u{2192}execute."
                         .into(),
                 );
             }
@@ -439,7 +413,8 @@ fn get_tool_description(path: &std::path::Path) -> String {
         }
         // Return first meaningful line, truncated
         let desc = if trimmed.len() > 120 {
-            format!("{}...", &trimmed[..117])
+            let end = crate::markdown::safe_truncate(trimmed, 117);
+            format!("{}...", &trimmed[..end])
         } else {
             trimmed.to_string()
         };

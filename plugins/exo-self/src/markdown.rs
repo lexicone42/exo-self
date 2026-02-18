@@ -1,5 +1,18 @@
 use std::collections::HashMap;
 
+/// Find the largest byte index <= max that is a valid UTF-8 char boundary.
+/// Use this instead of `s[..max]` to avoid panicking on multi-byte chars.
+pub fn safe_truncate(s: &str, max: usize) -> usize {
+    if max >= s.len() {
+        return s.len();
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
+}
+
 /// Split journal content into entries by ## headings, return last N entries
 pub fn last_journal_entries(content: &str, max_entries: usize, max_chars: usize) -> String {
     let entries: Vec<&str> = content.split("\n## ").collect();
@@ -16,7 +29,8 @@ pub fn last_journal_entries(content: &str, max_entries: usize, max_chars: usize)
     let result = result.trim().to_string();
 
     if result.len() > max_chars {
-        let mut truncated = result[..max_chars - 3].to_string();
+        let end = safe_truncate(&result, max_chars.saturating_sub(3));
+        let mut truncated = result[..end].to_string();
         truncated.push_str("...");
         truncated
     } else {
@@ -30,7 +44,8 @@ pub fn last_journal_entry(content: &str, max_chars: usize) -> String {
     if sections.len() > 1 {
         let mut entry = format!("## {}", sections.last().unwrap().trim());
         if entry.len() > max_chars {
-            entry.truncate(max_chars - 3);
+            let end = safe_truncate(&entry, max_chars.saturating_sub(3));
+            entry.truncate(end);
             entry.push_str("...");
         }
         entry
@@ -280,7 +295,8 @@ pub fn extract_synthesis_findings(content: &str) -> String {
 
     // Cap at 800 chars
     if result.len() > 800 {
-        result.truncate(797);
+        let end = safe_truncate(&result, 797);
+        result.truncate(end);
         result.push_str("...");
     }
     result

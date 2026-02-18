@@ -107,10 +107,8 @@ NEEDED_ALLOWS=(
     "Read($HOME/.claude/**)"
     "Write($EXO_DIR/**)"
     "Edit($EXO_DIR/**)"
-    "Skill(exo-self:context-budget)"
     "Skill(exo-self:exo)"
     "Skill(exo-self:interests)"
-    "Skill(exo-self:reflect)"
     "Skill(exo-self:self-reflection)"
 )
 

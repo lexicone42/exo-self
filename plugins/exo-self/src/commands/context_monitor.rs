@@ -20,11 +20,7 @@ pub fn run() {
     }
 
     // Derive project slug
-    let slug = if !input.cwd.is_empty() {
-        project::slug_from_path(&input.cwd)
-    } else {
-        project::slug_from_cwd()
-    };
+    let slug = project::slug_from_input(&input.cwd);
     if !slug.is_empty() && state.project_slug.is_empty() {
         state.project_slug = slug.clone();
     }

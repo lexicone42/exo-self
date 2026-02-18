@@ -29,7 +29,7 @@ pub fn run() {
     if state.checkin_fired
         && !state.checkin_responded
         && session_start > 0.0
-        && detect_wrote_notes(&state, &paths, session_start)
+        && project::detect_wrote_notes(&state, &paths, session_start)
     {
         state.checkin_responded = true;
         state.save(&paths);
@@ -87,15 +87,11 @@ pub fn run() {
         };
 
         for spark_text in &sparks_found {
-            let dedup_key = (
-                spark_text[..spark_text.len().min(100)].to_lowercase(),
-                project_slug.clone(),
-            );
+            let dedup_end = markdown::safe_truncate(spark_text, 100);
+            let dedup_key = (spark_text[..dedup_end].to_lowercase(), project_slug.clone());
             let is_dup = meta.sparks.iter().any(|s| {
-                (
-                    s.text[..s.text.len().min(100)].to_lowercase(),
-                    s.project.clone(),
-                ) == dedup_key
+                let s_end = markdown::safe_truncate(&s.text, 100);
+                (s.text[..s_end].to_lowercase(), s.project.clone()) == dedup_key
             });
             if !is_dup {
                 meta.sparks.push(Spark {
@@ -131,11 +127,12 @@ pub fn run() {
         };
 
         for change_text in &changes_found {
-            let dedup_key = change_text[..change_text.len().min(100)].to_lowercase();
-            let is_dup = meta
-                .lessons
-                .iter()
-                .any(|l| l.text[..l.text.len().min(100)].to_lowercase() == dedup_key);
+            let dedup_end = markdown::safe_truncate(change_text, 100);
+            let dedup_key = change_text[..dedup_end].to_lowercase();
+            let is_dup = meta.lessons.iter().any(|l| {
+                let l_end = markdown::safe_truncate(&l.text, 100);
+                l.text[..l_end].to_lowercase() == dedup_key
+            });
             if !is_dup {
                 meta.lessons.push(Lesson {
                     text: change_text.clone(),
@@ -185,7 +182,7 @@ pub fn run() {
 
         // Interest exploration
         let interest_explored = if session_start > 0.0 {
-            file_modified_after(&paths.interests, session_start)
+            project::file_modified_after(&paths.interests, session_start)
         } else {
             false
         };
@@ -328,34 +325,6 @@ pub fn run() {
 
     // SessionEnd can't block — just exit clean
     hook_io::empty_output();
-}
-
-fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
-    if !state.session_notes_path.is_empty()
-        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path)
-    {
-        let (_, prose) = markdown::parse_frontmatter(&content);
-        if !prose.trim().is_empty() {
-            return true;
-        }
-    }
-    if session_start > 0.0 {
-        return file_modified_after(&paths.journal, session_start);
-    }
-    false
-}
-
-fn file_modified_after(path: &std::path::Path, after: f64) -> bool {
-    std::fs::metadata(path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .map(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64()
-                > after
-        })
-        .unwrap_or(false)
 }
 
 fn compute_reflection_autonomy(

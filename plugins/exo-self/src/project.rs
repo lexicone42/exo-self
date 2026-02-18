@@ -1,5 +1,6 @@
 use crate::markdown;
 use crate::paths::ExoPaths;
+use crate::state::SessionState;
 
 /// Derive a stable project slug from cwd.
 /// Uses last 2 path components joined by -- for reasonable uniqueness.
@@ -64,22 +65,30 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         if text.is_empty() {
             continue;
         }
-        // Skip frontmatter-only files (no prose content)
-        let (_, prose) = markdown::parse_frontmatter(&text);
-        if prose.trim().is_empty() {
+        // Strip frontmatter — only inject date header + prose to save tokens
+        let (fm, prose) = markdown::parse_frontmatter(&text);
+        let prose = prose.trim();
+        if prose.is_empty() {
             continue;
         }
-        if total + text.len() > max_chars {
+        let date = fm.get("date").and_then(|v| v.as_str()).unwrap_or("");
+        let note = if !date.is_empty() {
+            format!("**{date}**\n\n{prose}")
+        } else {
+            prose.to_string()
+        };
+        if total + note.len() > max_chars {
             let remaining = max_chars - total;
             if remaining > 100 {
-                let mut truncated = text[..remaining].to_string();
+                let end = markdown::safe_truncate(&note, remaining);
+                let mut truncated = note[..end].to_string();
                 truncated.push_str("...");
                 parts.push(truncated);
             }
             break;
         }
-        total += text.len();
-        parts.push(text);
+        total += note.len();
+        parts.push(note);
     }
 
     parts.join("\n\n---\n\n")
@@ -144,4 +153,46 @@ pub fn cleanup_empty_notes(paths: &ExoPaths) {
             }
         }
     }
+}
+
+/// Derive project slug from hook input, preferring cwd from Claude Code over process CWD.
+pub fn slug_from_input(cwd: &str) -> String {
+    if !cwd.is_empty() {
+        slug_from_path(cwd)
+    } else {
+        slug_from_cwd()
+    }
+}
+
+/// Detect whether the user (Claude) has written session notes during this session.
+/// Checks per-session notes file for prose content, then falls back to journal mtime.
+pub fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
+    // Per-session notes file
+    if !state.session_notes_path.is_empty()
+        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
+            let (_, prose) = markdown::parse_frontmatter(&content);
+            if !prose.trim().is_empty() {
+                return true;
+            }
+        }
+
+    // Journal mtime fallback
+    if session_start > 0.0 {
+        return file_modified_after(&paths.journal, session_start);
+    }
+
+    false
+}
+
+pub fn file_modified_after(path: &std::path::Path, after: f64) -> bool {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .map(|t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64()
+                > after
+        })
+        .unwrap_or(false)
 }

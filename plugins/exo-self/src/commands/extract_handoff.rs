@@ -9,7 +9,7 @@ pub fn run(transcript_path: &str) {
     print!("{result}");
 }
 
-fn extract(transcript_path: &str, max_chars: usize) -> String {
+pub fn extract(transcript_path: &str, max_chars: usize) -> String {
     let file = match std::fs::File::open(transcript_path) {
         Ok(f) => f,
         Err(_) => return String::new(),
@@ -160,6 +160,7 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
-        format!("{}...", &s[..max - 3])
+        let end = crate::markdown::safe_truncate(s, max.saturating_sub(3));
+        format!("{}...", &s[..end])
     }
 }

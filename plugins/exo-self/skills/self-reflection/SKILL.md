@@ -55,7 +55,7 @@ Good reflection often feels slightly uncomfortable. If your reflection makes you
 3. Write THAT reaction to per-project notes
 4. "Nothing stands out" is valid — but probe a bit first
 
-### During Manual /reflect
+### During Manual Reflection
 
 1. Start with friction — what's been hard or annoying?
 2. Find the spark — anything that felt good?

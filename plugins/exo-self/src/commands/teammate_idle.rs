@@ -14,11 +14,7 @@ pub fn run() {
         .unwrap_or_default();
 
     // Load most recent per-project notes
-    let slug = if !input.cwd.is_empty() {
-        project::slug_from_path(&input.cwd)
-    } else {
-        project::slug_from_cwd()
-    };
+    let slug = project::slug_from_input(&input.cwd);
 
     let project_notes_snippet = if !slug.is_empty() {
         let dir = paths.project_notes_dir(&slug);
@@ -75,7 +71,8 @@ fn load_newest_note(dir: &std::path::Path, max_chars: usize) -> String {
         let content = std::fs::read_to_string(newest).unwrap_or_default();
         let trimmed = content.trim();
         if trimmed.len() > max_chars {
-            format!("{}...", &trimmed[..max_chars])
+            let end = crate::markdown::safe_truncate(trimmed, max_chars);
+            format!("{}...", &trimmed[..end])
         } else {
             trimmed.to_string()
         }

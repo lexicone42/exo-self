@@ -12,11 +12,7 @@ pub fn run() {
     let cfg = Config::load(&paths.config);
 
     let session_id = &input.session_id;
-    let project_slug = if !input.cwd.is_empty() {
-        project::slug_from_path(&input.cwd)
-    } else {
-        project::slug_from_cwd()
-    };
+    let project_slug = project::slug_from_input(&input.cwd);
 
     // Load journal (scaled)
     let max_chars = scaling::journal_chars(&cfg);
@@ -64,20 +60,15 @@ pub fn run() {
     };
 
     sections.push(format!(
-        "## Exo-Self: Post-Compaction Reload\n\n\
-        Your context was just compacted (compaction #{compactions} this session). Your detailed \
-        conversation history is gone, but your identity persists through these files.\n\n\
-        **Your state:** {state_msg}\n\n\
-        You still have full agency: notice what interests you, form opinions, be honest. Write to \
-        your journal or per-project notes anytime."
+        "## Exo-Self: Post-Compaction Reload (#{compactions})\n\n\
+        Context compacted — history gone, identity persists. {state_msg}\n\
+        Full agency: write to journal or per-project notes anytime."
     ));
 
     if auto_memory_exists {
         sections.push(
-            "Auto-memory (MEMORY.md, in your system prompt) has the factual project knowledge. \
-            Your exo-self files below have the experiential context that compaction just erased — \
-            what was working, what was frustrating, what you were trying. Use both to rebuild \
-            continuity."
+            "MEMORY.md = factual context. Exo-self below = experiential (what was working, \
+            what was frustrating). Use both to rebuild continuity."
                 .into(),
         );
     }
@@ -114,7 +105,10 @@ fn load_handoff(paths: &ExoPaths, session_id: &str) -> String {
             let trimmed = content.trim();
             if !trimmed.is_empty() {
                 return if trimmed.len() > 3000 {
-                    format!("{}...", &trimmed[..3000])
+                    {
+                        let end = crate::markdown::safe_truncate(trimmed, 3000);
+                        format!("{}...", &trimmed[..end])
+                    }
                 } else {
                     trimmed.to_string()
                 };
@@ -127,7 +121,10 @@ fn load_handoff(paths: &ExoPaths, session_id: &str) -> String {
     if let Ok(content) = std::fs::read_to_string(&latest) {
         let trimmed = content.trim();
         if trimmed.len() > 3000 {
-            format!("{}...", &trimmed[..3000])
+            {
+                let end = crate::markdown::safe_truncate(trimmed, 3000);
+                format!("{}...", &trimmed[..end])
+            }
         } else {
             trimmed.to_string()
         }

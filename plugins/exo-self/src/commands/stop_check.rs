@@ -1,6 +1,7 @@
 use crate::hook_io::{self, HookInput};
 use crate::meta::Meta;
 use crate::paths::ExoPaths;
+use crate::project;
 use crate::state::{self, SessionState};
 
 pub fn run() {
@@ -12,7 +13,7 @@ pub fn run() {
     let session_start = state.session_start;
 
     // --- Bookkeeping BEFORE early-exit guards ---
-    let wrote_notes = detect_wrote_notes(&state, &paths, session_start);
+    let wrote_notes = project::detect_wrote_notes(&state, &paths, session_start);
 
     // Update checkin_responded BEFORE guards
     if wrote_notes && state.checkin_fired && !state.checkin_responded {
@@ -99,37 +100,4 @@ pub fn run() {
         state.save(&paths);
         hook_io::empty_output();
     }
-}
-
-fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
-    // Per-session notes file
-    if !state.session_notes_path.is_empty()
-        && let Ok(meta) = std::fs::metadata(&state.session_notes_path)
-        && meta.len() > 0
-    {
-        // Check if file has content beyond just frontmatter
-        if let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
-            // Has content beyond frontmatter template
-            let (_, prose) = crate::markdown::parse_frontmatter(&content);
-            if !prose.trim().is_empty() {
-                return true;
-            }
-        }
-    }
-
-    // Journal mtime fallback
-    if session_start > 0.0
-        && let Ok(meta) = std::fs::metadata(&paths.journal)
-        && let Ok(modified) = meta.modified()
-    {
-        let mtime = modified
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs_f64();
-        if mtime > session_start {
-            return true;
-        }
-    }
-
-    false
 }
