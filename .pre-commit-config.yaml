@@ -7,9 +7,3 @@ repos:
         entry: /home/bryan/.claude/bin/preflight
         always_run: true
         pass_filenames: false
-      - id: sync-version
-        name: sync version to marketplace.json + plugin.json
-        language: system
-        entry: ./scripts/sync-version.sh
-        always_run: true
-        pass_filenames: false

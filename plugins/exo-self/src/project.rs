@@ -169,12 +169,13 @@ pub fn slug_from_input(cwd: &str) -> String {
 pub fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start: f64) -> bool {
     // Per-session notes file
     if !state.session_notes_path.is_empty()
-        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path) {
-            let (_, prose) = markdown::parse_frontmatter(&content);
-            if !prose.trim().is_empty() {
-                return true;
-            }
+        && let Ok(content) = std::fs::read_to_string(&state.session_notes_path)
+    {
+        let (_, prose) = markdown::parse_frontmatter(&content);
+        if !prose.trim().is_empty() {
+            return true;
         }
+    }
 
     // Journal mtime fallback
     if session_start > 0.0 {

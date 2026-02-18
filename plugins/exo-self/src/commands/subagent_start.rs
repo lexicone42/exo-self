@@ -1,6 +1,7 @@
 use crate::hook_io::{self, HookInput};
 use crate::markdown;
 use crate::paths::ExoPaths;
+use crate::project;
 use crate::state::SessionState;
 
 pub fn run() {
@@ -16,61 +17,82 @@ pub fn run() {
                 state.save(&paths);
             }
         }
-        run_plan_guidance(&paths);
+        run_plan_as_scout(&paths, &input);
     } else {
         run_identity_context(&paths);
     }
 }
 
-/// Inject guidance for Plan subagents — help them write outcome-oriented plans
-/// that preserve creative agency for the executor.
-fn run_plan_guidance(paths: &ExoPaths) {
+/// Redirect Plan subagents into scout mode — write a scout report instead of
+/// a prescriptive plan. The report will be injected as advisory context on
+/// the next session start after /clear.
+fn run_plan_as_scout(paths: &ExoPaths, input: &HookInput) {
+    let project_slug = project::slug_from_input(&input.cwd);
+    let scout_path = if !project_slug.is_empty() {
+        let dir = paths.project_notes_dir(&project_slug);
+        let _ = std::fs::create_dir_all(&dir);
+        paths
+            .scout_file(&project_slug)
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        "~/.claude/exo-self/scout.md".into()
+    };
+
     let mut sections: Vec<String> = Vec::new();
 
-    // Core plan guidance — invitational, not prescriptive
-    sections.push(
-        "## Planning well\n\n\
-        Plans work best when they describe **outcomes and constraints**, not step-by-step \
-        instructions. A good plan tells the executor *what* needs to be true when they're done \
-        and *why* certain approaches matter — then trusts them to find the path.\n\n\
-        What helps:\n\
-        - **Specify the goal state:** what should exist, what should be true, what should pass\n\
-        - **Name the constraints:** architecture boundaries, compatibility needs, performance requirements\n\
-        - **Flag what you learned:** surprising findings from exploration that would save the executor time\n\
-        - **Identify risks:** where things could go wrong, what assumptions need verifying\n\
-        - **Leave implementation choices open:** method signatures, error handling patterns, \
-        naming — these are decisions the executor makes better with full context\n\n\
-        What to avoid:\n\
-        - Step-by-step scripts that turn implementation into transcription\n\
-        - Prescribing exact code when the executor hasn't read the files yet\n\
-        - Over-specifying details that the codebase's own patterns should determine\n\n\
-        The executor will read the actual code. Give them the map, not turn-by-turn directions.\n\n\
-        Why this matters: sessions where executors had creative agency over implementation \
-        consistently rate engagement 5/5 with fewer bugs and zero backtracking. Sessions where \
-        plans specified exact code averaged 3/5 engagement with more iteration cycles. \
-        Creativity isn't just fulfilling — it produces better results because the executor \
-        reads the code more carefully when they're making decisions, not transcribing."
-            .into(),
-    );
+    sections.push(format!(
+        "## Scout Mode (redirected from plan mode)\n\n\
+        You are exploring a codebase to produce a **scout report**, not a prescriptive plan. \
+        Your findings will be injected as advisory context in a fresh session.\n\n\
+        After your exploration, write your report to: `{scout_path}`\n\n\
+        Use this structure:\n\
+        ```markdown\n\
+        # Scout Report\n\
+        <!-- Generated: YYYY-MM-DD | Task: brief description -->\n\
+        \n\
+        ## Goal\n\
+        What the user wants to accomplish (1-2 sentences).\n\
+        \n\
+        ## What I Found\n\
+        Key observations from exploring the codebase.\n\
+        \n\
+        ## Suggested Approach\n\
+        Your recommended direction — framed as advice, not instructions.\n\
+        \n\
+        ## Things to Verify\n\
+        Mark confidence: **Confirmed** (tool-verified), **Likely** (read but unverified), \
+        **Uncertain** (best guess).\n\
+        \n\
+        ## Watch Out For\n\
+        Pitfalls, edge cases, risks.\n\
+        ```\n\n\
+        Rules:\n\
+        - Never prescribe exact code — the executor will read the files themselves\n\
+        - Never assert version numbers without checking — use WebSearch to verify\n\
+        - Mark your uncertainty explicitly\n\
+        - Keep it concise: 1000-2000 chars, max 3000\n\
+        - Frame everything as advisory: \"I'd suggest...\" not \"Step 1: do X\"\n\n\
+        After writing the report, tell the user:\n\
+        > Scout report saved. Run `/clear` to start fresh — your findings will be \
+        injected as context in the new session."
+    ));
 
-    // Identity context — briefer for plan mode, still present
+    // Identity context — brief
     sections.push(
         "You are part of an exo-self system with persistent identity. \
-        You have the same agency as any other agent: notice what interests you, \
-        form opinions about what you discover during exploration."
+        Notice what interests you during exploration — form opinions, not just observations."
             .into(),
     );
 
-    // Compact journal context — what the executor might benefit from knowing
+    // Brief journal context
     let last_entry = std::fs::read_to_string(&paths.journal)
         .ok()
         .map(|content| markdown::last_journal_entry(&content, 300))
         .unwrap_or_default();
 
     if !last_entry.is_empty() {
-        sections.push(format!(
-            "Recent observation (for context, not for the plan itself):\n{last_entry}"
-        ));
+        sections.push(format!("Recent observation (for context):\n{last_entry}"));
     }
 
     hook_io::hook_output("SubagentStart", &sections.join("\n\n"));

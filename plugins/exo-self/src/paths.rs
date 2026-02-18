@@ -46,6 +46,11 @@ impl ExoPaths {
         self.per_project_dir.join(slug)
     }
 
+    /// Per-project scout report file (one-shot, consumed on session start)
+    pub fn scout_file(&self, slug: &str) -> PathBuf {
+        self.per_project_dir.join(slug).join("scout.md")
+    }
+
     /// Auto-memory directory path for Claude Code's native memory system.
     /// Pass the hook input's `cwd` when available; falls back to process CWD.
     pub fn auto_memory_dir_for(&self, cwd: &str) -> Option<PathBuf> {

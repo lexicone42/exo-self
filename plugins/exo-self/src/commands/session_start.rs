@@ -244,28 +244,19 @@ pub fn run() {
         ));
     }
 
-    // Investigation nudge for mature projects (≥4 prior sessions)
+    // Scout mode nudge — always present, replaces plan mode
+    sections.push(
+        "For complex tasks, use `/scout <task>` instead of plan mode. \
+        It explores deeply (including current docs/versions), writes advisory notes, \
+        then you `/clear` to start fresh with findings as context — not as a prescriptive plan."
+            .into(),
+    );
+
+    // Inject pending scout report (one-shot: read then delete)
     if !project_slug.is_empty() {
-        let notes_dir = paths.project_notes_dir(&project_slug);
-        if notes_dir.is_dir() {
-            let session_count = std::fs::read_dir(&notes_dir)
-                .map(|entries| {
-                    entries
-                        .flatten()
-                        .filter(|e| {
-                            let name = e.file_name();
-                            let name = name.to_string_lossy();
-                            name.ends_with(".md") && name != "_legacy.md"
-                        })
-                        .count()
-                })
-                .unwrap_or(0);
-            if session_count >= 4 {
-                sections.push(
-                    "Mature project — consider scan\u{2192}analyze\u{2192}fix over plan\u{2192}execute."
-                        .into(),
-                );
-            }
+        let scout_section = load_and_consume_scout(&paths, &project_slug);
+        if !scout_section.is_empty() {
+            sections.push(scout_section);
         }
     }
 
@@ -320,6 +311,42 @@ fn merge_plugin_contexts(cfg: &Config) -> String {
     }
 
     merged
+}
+
+/// Load a pending scout report and delete the file (one-shot injection).
+/// The scout report is advisory context — framed so the executor treats it as
+/// information to consider, not instructions to follow.
+fn load_and_consume_scout(paths: &ExoPaths, project_slug: &str) -> String {
+    let scout_path = paths.scout_file(project_slug);
+    if !scout_path.is_file() {
+        return String::new();
+    }
+
+    let content = match std::fs::read_to_string(&scout_path) {
+        Ok(c) if !c.trim().is_empty() => c,
+        _ => {
+            let _ = std::fs::remove_file(&scout_path);
+            return String::new();
+        }
+    };
+
+    // Consume: delete after reading
+    let _ = std::fs::remove_file(&scout_path);
+
+    // Truncate if too long (scout should be concise, but safety net)
+    let content = if content.len() > 4000 {
+        let end = crate::markdown::safe_truncate(&content, 3900);
+        format!("{}...\n\n*(scout report truncated)*", &content[..end])
+    } else {
+        content
+    };
+
+    format!(
+        "### Scout Report (advisory — your tool results supersede these findings)\n\n\
+        A previous exploration produced this report. Treat it as a scout's field notes:\n\
+        useful context, not a contract. Where your own investigation disagrees, trust your tools.\n\n\
+        {content}"
+    )
 }
 
 /// Discover tools in ~/.claude/bin/ and build a context section describing them.
