@@ -84,3 +84,64 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
 
     parts.join("\n\n---\n\n")
 }
+
+/// Remove empty session notes files (frontmatter-only, no prose) from all per-project dirs.
+/// Called at both session-start and session-end to minimize accumulation of empties
+/// from short sessions where hooks don't fire cleanly.
+pub fn cleanup_empty_notes(paths: &ExoPaths) {
+    let Ok(projects) = std::fs::read_dir(&paths.per_project_dir) else {
+        return;
+    };
+
+    let skip = ["_legacy.md", "sessions.md"];
+
+    for project_entry in projects.flatten() {
+        let project_path = project_entry.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+
+        let Ok(notes) = std::fs::read_dir(&project_path) else {
+            continue;
+        };
+
+        for note_entry in notes.flatten() {
+            let note_path = note_entry.path();
+            let Some(name) = note_path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+
+            if !name.ends_with(".md") || skip.contains(&name) {
+                continue;
+            }
+
+            // Only check small files — real notes with prose are larger
+            let Ok(meta) = std::fs::metadata(&note_path) else {
+                continue;
+            };
+            if meta.len() > 500 {
+                continue;
+            }
+
+            let Ok(content) = std::fs::read_to_string(&note_path) else {
+                continue;
+            };
+
+            let (_, prose) = markdown::parse_frontmatter(&content);
+            if prose.trim().is_empty() {
+                let _ = std::fs::remove_file(&note_path);
+            }
+        }
+    }
+
+    // Remove empty project directories
+    if let Ok(projects) = std::fs::read_dir(&paths.per_project_dir) {
+        for entry in projects.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                // rmdir only succeeds on empty dirs
+                let _ = std::fs::remove_dir(&path);
+            }
+        }
+    }
+}

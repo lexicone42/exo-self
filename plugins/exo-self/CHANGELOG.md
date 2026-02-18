@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+Cleanup at both ends of the session lifecycle.
+
+### Fixed
+- **Empty notes cleanup at session-end too** — Moved `cleanup_empty_notes` to shared `project` module and call it from both session-start AND session-end. Previously only ran at session-start, so empties from rapid testing sessions (e.g. gleisner-in-gleisner) accumulated until the next session-start in any project.
+- **Empty project directory cleanup** — After removing empty notes files, also removes project directories that become empty. Prevents stale directory accumulation from test/ephemeral projects.
+
 ## 1.4.0
 
 Less prescriptive plan mode, empty session file hygiene.

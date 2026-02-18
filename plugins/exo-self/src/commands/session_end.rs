@@ -2,6 +2,7 @@ use crate::hook_io::{self, HookInput};
 use crate::markdown;
 use crate::meta::*;
 use crate::paths::ExoPaths;
+use crate::project;
 use crate::state::{self, SessionState};
 use std::collections::HashMap;
 
@@ -274,6 +275,9 @@ pub fn run() {
     if !state.session_notes_path.is_empty() && prose_content.trim().is_empty() {
         let _ = std::fs::remove_file(&state.session_notes_path);
     }
+
+    // Clean up empties from other sessions across all projects
+    project::cleanup_empty_notes(&paths);
 
     // Track session history (keep last 10)
     let mut entry = SessionHistoryEntry {
