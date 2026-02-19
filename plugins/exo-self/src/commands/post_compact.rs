@@ -62,7 +62,7 @@ pub fn run() {
     sections.push(format!(
         "## Exo-Self: Post-Compaction Reload (#{compactions})\n\n\
         Context compacted — history gone, identity persists. {state_msg}\n\
-        Full agency: write to journal or per-project notes anytime."
+        Full agency: write to `~/.claude/exo-self/` (journal, per-project notes) anytime."
     ));
 
     if auto_memory_exists {

@@ -65,7 +65,7 @@ pub fn run() {
         state.last_stop_time = state::now();
 
         let target = if !state.project_slug.is_empty() {
-            format!("per-project/{}/", state.project_slug)
+            format!("~/.claude/exo-self/per-project/{}/", state.project_slug)
         } else {
             "journal.md".into()
         };

@@ -92,7 +92,7 @@ fn nudge_msg(state: &SessionState) -> String {
 
 fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
-        format!("your session notes file (`per-project/{slug}/`)")
+        format!("your session notes file (`~/.claude/exo-self/per-project/{slug}/`)")
     } else {
         "`journal.md`".into()
     };
@@ -122,7 +122,7 @@ fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
 
 fn reserve_reminder(usage_pct: u32, slug: &str) -> String {
     let target = if !slug.is_empty() {
-        format!("your session notes (`per-project/{slug}/`)")
+        format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
     } else {
         "`journal.md`".into()
     };
