@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — Build exo-self binary after marketplace install/update
+# setup.sh — Build exo-self + tools after marketplace install/update
 #
 # Usage:
 #   claude plugin marketplace add lexicone42/exo-self   # first time
@@ -7,7 +7,9 @@
 #   ~/.claude/plugins/marketplaces/exo-self/plugins/exo-self/setup.sh
 #
 # The marketplace handles: git pull, cache sync, metadata, enabling.
-# This script handles: building the Rust binary and first-time runtime setup.
+# This script handles: building Rust binaries and first-time runtime setup.
+#
+# Binaries built: exo-self (plugin core), preflight (pre-commit), patchpath (mock.patch helper)
 #
 # Prerequisites: cargo, jq
 
@@ -43,36 +45,28 @@ fi
 
 echo "=== exo-self setup (v${VERSION}) ==="
 
-# --- 1. Build binary ---
-echo "1. Building binary..."
-(cd "$SCRIPT_DIR" && cargo build --release --quiet 2>&1)
+# --- 1. Build all workspace binaries ---
+WORKSPACE_ROOT="$SCRIPT_DIR/../.."
+echo "1. Building binaries..."
+(cd "$WORKSPACE_ROOT" && cargo build --release --quiet 2>&1)
 
-# Cargo may output to workspace-level target dir; prefer newest binary
-BINARY=""
-for CANDIDATE in \
-    "$SCRIPT_DIR/../../target/release/exo-self" \
-    "$SCRIPT_DIR/target/release/exo-self"; do
-    if [ -f "$CANDIDATE" ]; then
-        BINARY="$(cd "$(dirname "$CANDIDATE")" && pwd)/$(basename "$CANDIDATE")"
-        break
+TARGET_DIR="$WORKSPACE_ROOT/target/release"
+
+# --- 2. Install binaries to cache + symlink ---
+echo "2. Installing binaries..."
+mkdir -p "$CACHE_DIR/bin" "$CLAUDE_DIR/bin"
+
+BINARIES=(exo-self preflight patchpath)
+for BIN in "${BINARIES[@]}"; do
+    if [ -f "$TARGET_DIR/$BIN" ]; then
+        cp "$TARGET_DIR/$BIN" "$CACHE_DIR/bin/$BIN"
+        chmod +x "$CACHE_DIR/bin/$BIN"
+        ln -sf "$CACHE_DIR/bin/$BIN" "$CLAUDE_DIR/bin/$BIN"
+        echo "   $BIN $(du -h "$TARGET_DIR/$BIN" | cut -f1) -> ~/.claude/bin/$BIN"
+    else
+        echo "   WARN: $BIN not found in $TARGET_DIR"
     fi
 done
-if [ -z "$BINARY" ]; then
-    echo "ERROR: Binary not found after build."
-    exit 1
-fi
-echo "   $(du -h "$BINARY" | cut -f1)"
-
-# --- 2. Install binary to cache + symlink ---
-echo "2. Installing binary..."
-mkdir -p "$CACHE_DIR/bin"
-cp "$BINARY" "$CACHE_DIR/bin/exo-self"
-chmod +x "$CACHE_DIR/bin/exo-self"
-echo "   -> cache"
-
-mkdir -p "$CLAUDE_DIR/bin"
-ln -sf "$CACHE_DIR/bin/exo-self" "$CLAUDE_DIR/bin/exo-self"
-echo "   -> ~/.claude/bin/exo-self"
 
 # --- 3. Runtime setup (first-time, idempotent) ---
 echo "3. Runtime setup..."
