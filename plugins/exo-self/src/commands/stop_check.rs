@@ -91,7 +91,7 @@ pub fn run() {
             reason.push_str(&format!(", {}x compacted", state.compactions));
         }
         reason.push_str(&format!(
-            ". A sentence to ~/{target}? If nothing to note, just stop."
+            ". A sentence to {target}? If nothing to note, just stop."
         ));
 
         state.save(&paths);

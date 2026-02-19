@@ -173,12 +173,17 @@ fn run_rust_preflight(dir: &Path, dry_run: bool) -> bool {
     if which("cargo") {
         if dry_run {
             eprintln!("    would run: cargo fmt");
-            eprintln!("    would run: cargo clippy --fix --allow-dirty --allow-staged");
+            eprintln!(
+                "    would run: cargo clippy --fix --allow-dirty --allow-staged --all-targets"
+            );
+            eprintln!("    would run: cargo fmt (second pass — clippy --fix can break formatting)");
         } else {
+            // Pass 1: fmt to normalize formatting before clippy
             eprintln!("    cargo fmt...");
             if !run_in(dir, &["cargo", "fmt"]) {
                 ok = false;
             }
+            // Pass 2: clippy --fix (may rewrite code in non-fmt-compliant ways)
             eprintln!("    cargo clippy --fix...");
             if !run_in(
                 dir,
@@ -188,9 +193,15 @@ fn run_rust_preflight(dir: &Path, dry_run: bool) -> bool {
                     "--fix",
                     "--allow-dirty",
                     "--allow-staged",
+                    "--all-targets",
                 ],
             ) {
                 eprintln!("    clippy found unfixable issues (fixes still applied)");
+            }
+            // Pass 3: fmt again to clean up clippy's rewrites
+            eprintln!("    cargo fmt (post-clippy cleanup)...");
+            if !run_in(dir, &["cargo", "fmt"]) {
+                ok = false;
             }
         }
     } else {

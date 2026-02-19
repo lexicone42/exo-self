@@ -111,6 +111,87 @@ pub fn run() {
         }
     }
 
+    // Extract **Friction** items from prose → store as structured frictions
+    let frictions_found = if !prose_content.is_empty() {
+        markdown::extract_frictions(&prose_content)
+    } else {
+        Vec::new()
+    };
+
+    if !frictions_found.is_empty() {
+        let project_slug = &state.project_slug;
+        let sid = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+
+        for friction_text in &frictions_found {
+            let category = markdown::infer_friction_category(friction_text);
+            let dedup_end = markdown::safe_truncate(friction_text, 100);
+            let dedup_key = friction_text[..dedup_end].to_lowercase();
+            let is_dup = meta.frictions.iter().any(|f| {
+                let f_end = markdown::safe_truncate(&f.text, 100);
+                f.text[..f_end].to_lowercase() == dedup_key
+            });
+            if !is_dup {
+                meta.frictions.push(Friction {
+                    text: friction_text.clone(),
+                    category,
+                    project: project_slug.clone(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
+                    session_id: sid.to_string(),
+                });
+            }
+        }
+        // Cap at 30 (frictions accumulate more than sparks)
+        let len = meta.frictions.len();
+        if len > 30 {
+            meta.frictions = meta.frictions.split_off(len - 30);
+        }
+    }
+
+    // Also record tool-failure frictions from session state (automatic, not prose-dependent)
+    if state.tool_failures >= 3 {
+        for (tool, count) in &state.failure_tools {
+            if *count >= 3 {
+                let friction_text = format!("{} failures with {} tool", count, tool);
+                let category = "tool_failure".to_string();
+                let sid_check = if session_id.is_empty() {
+                    &state.session_id
+                } else {
+                    session_id
+                };
+                let is_dup = meta.frictions.iter().any(|f| {
+                    f.category == "tool_failure"
+                        && f.text.contains(tool)
+                        && f.session_id == *sid_check
+                });
+                if !is_dup {
+                    meta.frictions.push(Friction {
+                        text: friction_text,
+                        category,
+                        project: state.project_slug.clone(),
+                        timestamp: chrono::Local::now()
+                            .format("%Y-%m-%dT%H:%M:%S%.6f")
+                            .to_string(),
+                        session_id: if session_id.is_empty() {
+                            state.session_id.clone()
+                        } else {
+                            session_id.clone()
+                        },
+                    });
+                }
+            }
+        }
+        let len = meta.frictions.len();
+        if len > 30 {
+            meta.frictions = meta.frictions.split_off(len - 30);
+        }
+    }
+
     // Extract **Change** items from prose → store as lessons
     let changes_found = if !prose_content.is_empty() {
         markdown::extract_changes(&prose_content)

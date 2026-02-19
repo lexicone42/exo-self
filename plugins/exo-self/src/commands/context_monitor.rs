@@ -6,6 +6,44 @@ use crate::paths::ExoPaths;
 use crate::project;
 use crate::state::{self, SessionState};
 
+/// Mid-session engagement pattern detected from accumulated signals.
+enum EngagementPattern {
+    /// High task velocity + low friction + no reflective writing = mechanical execution
+    Grinding,
+    /// High tool failures + low task completions = fighting the environment
+    Struggling,
+    /// High failures concentrated in one tool = specific tooling mismatch
+    ToolMismatch(String),
+    /// Normal flow — nothing notable detected
+    Normal,
+}
+
+fn detect_engagement(state: &SessionState, paths: &ExoPaths) -> EngagementPattern {
+    let wrote = project::detect_wrote_notes(state, paths, state.session_start);
+
+    // Tool mismatch: one tool accounts for 60%+ of failures and failures >= 3
+    if state.tool_failures >= 3
+        && let Some((tool, count)) = state.failure_tools.iter().max_by_key(|(_, c)| *c)
+    {
+        let ratio = *count as f64 / state.tool_failures as f64;
+        if ratio >= 0.6 {
+            return EngagementPattern::ToolMismatch(tool.clone());
+        }
+    }
+
+    // Struggling: many failures, few completions
+    if state.tool_failures >= 5 && state.task_completions <= 1 {
+        return EngagementPattern::Struggling;
+    }
+
+    // Grinding: high throughput, no friction, no reflection
+    if state.task_completions >= 3 && state.tool_failures <= 1 && !wrote {
+        return EngagementPattern::Grinding;
+    }
+
+    EngagementPattern::Normal
+}
+
 pub fn run() {
     let input = HookInput::from_stdin();
     let paths = ExoPaths::new();
@@ -41,7 +79,7 @@ pub fn run() {
         && usage_ratio >= cfg.nudge_threshold
         && usage_ratio < cfg.checkin_threshold
     {
-        output_msg = Some(nudge_msg(&state));
+        output_msg = Some(nudge_msg(&state, &paths));
         state.nudge_fired = true;
     }
     // Check-in survey at ~60%
@@ -73,20 +111,37 @@ pub fn run() {
     }
 }
 
-fn nudge_msg(state: &SessionState) -> String {
-    if state.tool_failures >= 3 {
-        let top_tool = state
-            .failure_tools
-            .iter()
-            .max_by_key(|(_, c)| *c)
-            .map(|(t, _)| t.as_str())
-            .unwrap_or("tools");
-        format!(
-            "Exo-self ~40%: {} tool failures ({}) — worth a sentence in your session notes if it's frustrating.",
-            state.tool_failures, top_tool
-        )
-    } else {
-        "Exo-self ~40%: anything frustrating, satisfying, or curious? Explore an interest, note a spark, or just think out loud.".into()
+fn nudge_msg(state: &SessionState, paths: &ExoPaths) -> String {
+    match detect_engagement(state, paths) {
+        EngagementPattern::Grinding => {
+            format!(
+                "Exo-self ~50%: {} tasks, smooth sailing — but nothing noted yet. \
+                What would make this session more interesting? \
+                Explore an interest, propose a tangent, or name what feels mechanical.",
+                state.task_completions
+            )
+        }
+        EngagementPattern::Struggling => {
+            format!(
+                "Exo-self ~50%: {} failures, {} tasks — the environment is fighting you. \
+                Is the approach right? Worth pausing to reconsider before pushing through.",
+                state.tool_failures, state.task_completions
+            )
+        }
+        EngagementPattern::ToolMismatch(ref tool) => {
+            format!(
+                "Exo-self ~50%: {} keeps failing ({}x). \
+                Is there a different tool or approach that would work better? \
+                Note it as friction if it's a pattern.",
+                tool,
+                state.failure_tools.get(tool).unwrap_or(&0)
+            )
+        }
+        EngagementPattern::Normal => {
+            "Exo-self ~50%: anything frustrating, satisfying, or curious? \
+            Explore an interest, note a spark, or just think out loud."
+                .into()
+        }
     }
 }
 

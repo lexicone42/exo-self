@@ -17,6 +17,7 @@ pub struct Meta {
     pub session_history: Vec<SessionHistoryEntry>,
     pub sparks: Vec<Spark>,
     pub lessons: Vec<Lesson>,
+    pub frictions: Vec<Friction>,
     pub welfare_summary: Option<WelfareSummary>,
 }
 
@@ -48,6 +49,15 @@ pub struct Spark {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Lesson {
     pub text: String,
+    pub project: String,
+    pub timestamp: String,
+    pub session_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Friction {
+    pub text: String,
+    pub category: String,
     pub project: String,
     pub timestamp: String,
     pub session_id: String,

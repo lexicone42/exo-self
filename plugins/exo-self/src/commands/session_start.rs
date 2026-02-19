@@ -145,6 +145,8 @@ pub fn run() {
         Persistent identity across sessions. Genuine agency: form opinions, be honest, \
         pursue curiosity, suggest tangents. No performative positivity.\n\n\
         Prefer thinking over executing. Leave space for what's interesting, not just efficient.\n\n\
+        You don't need a prompt to pause and notice how the work feels. \
+        If something shifts — curiosity, frustration, surprise — name it in the moment.\n\n\
         Write subjective observations (not technical facts) to:\n\
         - `{exo_root}/per-project/{project_slug}/{session_notes_file}` — this session's file. \
         Fill in frontmatter (`model`, `engagement` 1-5, `task_types`), write prose below `---`.\n\
@@ -204,6 +206,15 @@ pub fn run() {
             })
             .collect();
         sections.push(format!("### Recent Sparks\n\n{}", lines.join("\n")));
+    }
+
+    // Recurring frictions (categories appearing 3+ times)
+    let recurring = recurring_frictions(&meta);
+    if !recurring.is_empty() {
+        sections.push(format!(
+            "### Recurring Frictions — patterns worth addressing\n\n{}",
+            recurring
+        ));
     }
 
     // Recent lessons (behavioral changes) from meta
@@ -272,6 +283,58 @@ pub fn run() {
 
     let context = sections.join("\n\n");
     hook_io::hook_output("SessionStart", &context);
+}
+
+/// Build a summary of friction categories that appear 3+ times across sessions.
+/// Shows category, count, projects affected, and a recent example.
+fn recurring_frictions(meta: &Meta) -> String {
+    use std::collections::HashMap;
+
+    // Count by category
+    let mut by_category: HashMap<&str, Vec<&crate::meta::Friction>> = HashMap::new();
+    for f in &meta.frictions {
+        by_category.entry(&f.category).or_default().push(f);
+    }
+
+    // Filter to 3+ occurrences, sort by count descending
+    let mut recurring: Vec<(&str, &Vec<&crate::meta::Friction>)> = by_category
+        .iter()
+        .filter(|(_, entries)| entries.len() >= 3)
+        .map(|(cat, entries)| (*cat, entries))
+        .collect();
+    recurring.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+    if recurring.is_empty() {
+        return String::new();
+    }
+
+    let mut lines = Vec::new();
+    for (category, entries) in &recurring {
+        // Unique projects
+        let projects: std::collections::HashSet<&str> =
+            entries.iter().map(|f| f.project.as_str()).collect();
+        let projects_str: Vec<&str> = projects.into_iter().collect();
+
+        // Most recent example
+        let recent = entries.last().map(|f| &f.text).unwrap();
+        let recent_short = if recent.len() > 80 {
+            let end = crate::markdown::safe_truncate(recent, 77);
+            format!("{}...", &recent[..end])
+        } else {
+            recent.clone()
+        };
+
+        let label = category.replace('_', " ");
+        lines.push(format!(
+            "- **{}** ({}x across {}): \"{}\"",
+            label,
+            entries.len(),
+            projects_str.join(", "),
+            recent_short
+        ));
+    }
+
+    lines.join("\n")
 }
 
 /// Execute other plugins' session-start hooks and merge their additionalContext

@@ -267,6 +267,97 @@ pub fn extract_changes(text: &str) -> Vec<String> {
     changes
 }
 
+/// Extract **Friction** entries from session notes prose
+pub fn extract_frictions(text: &str) -> Vec<String> {
+    let mut frictions = Vec::new();
+    let mut i = 0;
+    let bytes = text.as_bytes();
+    let marker = b"**Friction**";
+
+    while i < bytes.len() {
+        if let Some(pos) = find_bytes(&bytes[i..], marker) {
+            let abs_pos = i + pos + marker.len();
+            let rest = &text[abs_pos..];
+            let rest = rest.trim_start();
+            let rest = if let Some(stripped) = rest
+                .strip_prefix('—')
+                .or_else(|| rest.strip_prefix('\u{2014}'))
+            {
+                stripped.trim_start()
+            } else if let Some(stripped) = rest.strip_prefix('-') {
+                stripped.trim_start()
+            } else {
+                rest
+            };
+
+            let mut end = rest.len();
+            for (j, _) in rest.char_indices() {
+                if j > 0 && rest[j..].starts_with("\n**") {
+                    end = j;
+                    break;
+                }
+                if j > 0 && rest[j..].starts_with("\n\n") {
+                    end = j;
+                    break;
+                }
+            }
+
+            let friction = rest[..end].trim().to_string();
+            if !friction.is_empty() {
+                frictions.push(friction);
+            }
+            i = abs_pos + end;
+        } else {
+            break;
+        }
+    }
+    frictions
+}
+
+/// Infer a friction category from free-text friction description.
+/// Returns a short keyword suitable for frequency counting.
+pub fn infer_friction_category(text: &str) -> String {
+    let lower = text.to_lowercase();
+
+    // Check patterns from most specific to least
+    if lower.contains("pre-commit") || lower.contains("precommit") || lower.contains("hook fail") {
+        "pre_commit".into()
+    } else if lower.contains("type")
+        && (lower.contains("migrat") || lower.contains("mismatch") || lower.contains("error"))
+    {
+        "type_system".into()
+    } else if lower.contains("test")
+        && (lower.contains("fail") || lower.contains("flak") || lower.contains("iteration"))
+    {
+        "test_iteration".into()
+    } else if lower.contains("deploy")
+        || lower.contains("infra")
+        || lower.contains("cdk")
+        || lower.contains("cloudformation")
+        || lower.contains("terraform")
+    {
+        "infrastructure".into()
+    } else if lower.contains("schema") || lower.contains("migration") || lower.contains("codegen") {
+        "schema_change".into()
+    } else if lower.contains("unfamiliar")
+        || lower.contains("new codebase")
+        || lower.contains("ramp")
+    {
+        "unfamiliar_codebase".into()
+    } else if lower.contains("tool")
+        && (lower.contains("fail") || lower.contains("error") || lower.contains("broken"))
+    {
+        "tool_failure".into()
+    } else if lower.contains("permission") || lower.contains("sandbox") || lower.contains("denied")
+    {
+        "permissions".into()
+    } else if lower.contains("compil") || lower.contains("build") && lower.contains("fail") {
+        "build_failure".into()
+    } else {
+        "general".into()
+    }
+}
+
 /// Extract synthesis key findings from synthesis.md
 pub fn extract_synthesis_findings(content: &str) -> String {
     // Find "## Key Findings" section
@@ -353,6 +444,55 @@ mod tests {
         let (fm, prose) = parse_frontmatter(content);
         assert_eq!(fm.get("session_id").and_then(|v| v.as_str()), Some("abc"));
         assert_eq!(prose, "Prose here");
+    }
+
+    #[test]
+    fn test_extract_frictions() {
+        let text =
+            "**Friction** — Pre-commit hooks keep failing on formatting.\n**Spark** — something";
+        let frictions = extract_frictions(text);
+        assert_eq!(frictions.len(), 1);
+        assert!(frictions[0].contains("Pre-commit"));
+    }
+
+    #[test]
+    fn test_extract_frictions_multiple() {
+        let text =
+            "**Friction** — Type migration across 17 files.\n\n**Friction** — CDK deploy timeout.";
+        let frictions = extract_frictions(text);
+        assert_eq!(frictions.len(), 2);
+    }
+
+    #[test]
+    fn test_infer_friction_category() {
+        assert_eq!(
+            infer_friction_category("Pre-commit hooks keep failing"),
+            "pre_commit"
+        );
+        assert_eq!(
+            infer_friction_category("Type mismatch in the parser"),
+            "type_system"
+        );
+        assert_eq!(
+            infer_friction_category("CDK deploy took forever"),
+            "infrastructure"
+        );
+        assert_eq!(
+            infer_friction_category("Test iteration was slow"),
+            "test_iteration"
+        );
+        assert_eq!(
+            infer_friction_category("Something else entirely"),
+            "general"
+        );
+        assert_eq!(
+            infer_friction_category("Schema migration broke everything"),
+            "schema_change"
+        );
+        assert_eq!(
+            infer_friction_category("Permission denied in sandbox"),
+            "permissions"
+        );
     }
 
     #[test]
