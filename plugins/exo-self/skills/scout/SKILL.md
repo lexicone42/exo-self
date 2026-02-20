@@ -20,6 +20,7 @@ You've been asked to **scout** a problem space. This is NOT plan mode. You are a
 - Read the actual code — don't guess from file names
 - Understand how similar features are implemented
 - Note architectural patterns the implementation should follow
+- **Capture key type signatures.** For APIs the executor will wire together, record 3-5 signatures (e.g. `fn foo(x: Bar) -> Baz`, `class Foo(protocol: str)`, type aliases). The executor shouldn't spend implementation time looking up what the scout already read.
 
 ### 2. Check external resources
 - **Actively verify versions**: use WebSearch or WebFetch to check current library versions, API docs, migration guides
@@ -40,6 +41,11 @@ What the user wants to accomplish (1-2 sentences).
 
 ## What I Found
 Key observations from exploring the codebase. What patterns exist, what's relevant, what surprised you.
+
+## Key Signatures
+The 3-5 most important type signatures the executor will need. Saves implementation-time lookups.
+- `path/to/file.rs`: `fn relevant_function(param: Type) -> ReturnType`
+- `path/to/file.rs`: `struct ImportantStruct { field: Type, ... }`
 
 ## Suggested Approach
 Your recommended direction — framed as advice, not instructions. Include alternatives if you see them.
