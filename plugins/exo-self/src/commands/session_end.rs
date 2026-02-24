@@ -154,38 +154,59 @@ pub fn run() {
     }
 
     // Also record tool-failure frictions from session state (automatic, not prose-dependent)
+    // Uses enriched category data from failure_tracker instead of flat "tool_failure"
     if state.tool_failures >= 3 {
-        for (tool, count) in &state.failure_tools {
-            if *count >= 3 {
-                let friction_text = format!("{} failures with {} tool", count, tool);
-                let category = "tool_failure".to_string();
-                let sid_check = if session_id.is_empty() {
-                    &state.session_id
-                } else {
-                    session_id
-                };
-                let is_dup = meta.frictions.iter().any(|f| {
-                    f.category == "tool_failure"
-                        && f.text.contains(tool)
-                        && f.session_id == *sid_check
-                });
+        let sid_ref = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+
+        // Record per-category frictions (more informative than per-tool)
+        for (category, count) in &state.failure_categories {
+            if *count >= 2 {
+                let friction_text = format!("{} {} failures", count, category);
+                let is_dup = meta
+                    .frictions
+                    .iter()
+                    .any(|f| f.category == *category && f.session_id == *sid_ref);
                 if !is_dup {
                     meta.frictions.push(Friction {
                         text: friction_text,
-                        category,
+                        category: category.clone(),
                         project: state.project_slug.clone(),
                         timestamp: chrono::Local::now()
                             .format("%Y-%m-%dT%H:%M:%S%.6f")
                             .to_string(),
-                        session_id: if session_id.is_empty() {
-                            state.session_id.clone()
-                        } else {
-                            session_id.clone()
-                        },
+                        session_id: sid_ref.clone(),
                     });
                 }
             }
         }
+
+        // Record stuck-loop friction if detected
+        if state.consecutive_same_tool >= 3 {
+            let friction_text = format!(
+                "{} consecutive failures with {} — stuck loop",
+                state.consecutive_same_tool, state.last_failure_tool
+            );
+            let is_dup = meta
+                .frictions
+                .iter()
+                .any(|f| f.category == "stuck_loop" && f.session_id == *sid_ref);
+            if !is_dup {
+                meta.frictions.push(Friction {
+                    text: friction_text,
+                    category: "stuck_loop".into(),
+                    project: state.project_slug.clone(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
+                    session_id: sid_ref.clone(),
+                });
+            }
+        }
+
         let len = meta.frictions.len();
         if len > 30 {
             meta.frictions = meta.frictions.split_off(len - 30);
@@ -279,6 +300,13 @@ pub fn run() {
             .map(|(t, _)| t.clone())
             .unwrap_or_default();
 
+        let dominant_friction_category = state
+            .failure_categories
+            .iter()
+            .max_by_key(|(_, c)| *c)
+            .map(|(cat, _)| cat.clone())
+            .unwrap_or_default();
+
         let self_rated = frontmatter.get("engagement").map(yaml_to_json);
         let self_reported_task_types: Vec<String> = frontmatter
             .get("task_types")
@@ -311,6 +339,7 @@ pub fn run() {
                 strategy_adaptation,
             },
             dominant_failure_tool,
+            dominant_friction_category,
         };
 
         // Write computed metrics to frontmatter
@@ -614,16 +643,29 @@ fn compute_welfare_summary(meta: &mut Meta) {
 
     // Dominant friction tool across all sessions
     let mut all_tools: HashMap<String, u32> = HashMap::new();
+    let mut all_categories: HashMap<String, u32> = HashMap::new();
     for h in &sessions {
-        let tool = &h.welfare_indicators.as_ref().unwrap().dominant_failure_tool;
-        if !tool.is_empty() {
-            *all_tools.entry(tool.clone()).or_insert(0) += 1;
+        let wi = h.welfare_indicators.as_ref().unwrap();
+        if !wi.dominant_failure_tool.is_empty() {
+            *all_tools
+                .entry(wi.dominant_failure_tool.clone())
+                .or_insert(0) += 1;
+        }
+        if !wi.dominant_friction_category.is_empty() {
+            *all_categories
+                .entry(wi.dominant_friction_category.clone())
+                .or_insert(0) += 1;
         }
     }
     let dominant_friction_tool = all_tools
         .iter()
         .max_by_key(|(_, c)| *c)
         .map(|(t, _)| t.clone())
+        .unwrap_or_default();
+    let dominant_friction_category = all_categories
+        .iter()
+        .max_by_key(|(_, c)| *c)
+        .map(|(cat, _)| cat.clone())
         .unwrap_or_default();
 
     meta.welfare_summary = Some(WelfareSummary {
@@ -637,6 +679,7 @@ fn compute_welfare_summary(meta: &mut Meta) {
         agency_score: (agency_score * 100.0).round() / 100.0,
         compaction_frequency: (compaction_freq * 100.0).round() / 100.0,
         dominant_friction_tool,
+        dominant_friction_category,
         checkin_response_rate: checkin_rate.map(|r| (r * 100.0).round() / 100.0),
     });
 }

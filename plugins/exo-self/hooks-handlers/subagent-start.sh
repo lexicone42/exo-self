@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-exec "$(dirname "$0")/../bin/exo-self" subagent-start
+SUBCMD="subagent-start"
+source "$(dirname "$0")/_common.sh"
+exec "$BIN" "$SUBCMD"

@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-exec "$(dirname "$0")/../bin/exo-self" session-end
+SUBCMD="session-end"
+source "$(dirname "$0")/_common.sh"
+exec "$BIN" "$SUBCMD"

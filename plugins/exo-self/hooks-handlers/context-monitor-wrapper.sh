@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-exec "$(dirname "$0")/../bin/exo-self" context-monitor
+SUBCMD="context-monitor"
+source "$(dirname "$0")/_common.sh"
+exec "$BIN" "$SUBCMD"

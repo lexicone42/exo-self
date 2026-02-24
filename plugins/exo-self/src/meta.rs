@@ -69,6 +69,8 @@ pub struct WelfareIndicators {
     pub metacognition: MetacognitionIndicators,
     #[serde(rename = "_dominant_failure_tool")]
     pub dominant_failure_tool: String,
+    #[serde(default, rename = "_dominant_friction_category")]
+    pub dominant_friction_category: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -108,6 +110,8 @@ pub struct WelfareSummary {
     pub agency_score: f64,
     pub compaction_frequency: f64,
     pub dominant_friction_tool: String,
+    #[serde(default)]
+    pub dominant_friction_category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkin_response_rate: Option<f64>,
 }

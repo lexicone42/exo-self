@@ -12,6 +12,8 @@ pub struct HookInput {
     pub trigger: String,
     pub reason: String,
     pub tool_name: String,
+    pub tool_input: Value,
+    pub error: String,
     pub stop_hook_active: bool,
     pub agent_type: String,
     pub permission_mode: String,

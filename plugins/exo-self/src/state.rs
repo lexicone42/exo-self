@@ -26,6 +26,9 @@ pub struct SessionState {
     pub tool_failures: u32,
     pub last_failure_at: f64,
     pub failure_tools: HashMap<String, u32>,
+    pub failure_categories: HashMap<String, u32>,
+    pub consecutive_same_tool: u32,
+    pub last_failure_tool: String,
     pub failure_nudge_sent: bool,
 
     // Task completions
@@ -64,6 +67,9 @@ impl Default for SessionState {
             tool_failures: 0,
             last_failure_at: 0.0,
             failure_tools: HashMap::new(),
+            failure_categories: HashMap::new(),
+            consecutive_same_tool: 0,
+            last_failure_tool: String::new(),
             failure_nudge_sent: false,
             task_completions: 0,
             last_task_completed_at: 0.0,
