@@ -167,6 +167,7 @@ Display welfare indicators — behavioral correlates under Sebo's (2025) proport
 | Check-in response rate | {checkin_response_rate} |
 | Compaction frequency | {compaction_frequency} |
 | Dominant friction tool | {dominant_friction_tool} |
+| Dominant friction category | {dominant_friction_category} |
 
 ### Recent Sessions
 [For each of the last 3 sessions with indicators, show a compact row:]
@@ -228,7 +229,9 @@ This uses the introspection agent for deep analysis.
    [Autonomous vs prompted reflection rates, conditions that produce high agency]
 
    ### Friction Landscape
-   [Recurring failure tools, friction density trends, friction-engagement correlation]
+   [Recurring failure tools and categories, friction density trends, friction-engagement correlation.
+    Note: `dominant_friction_category` (e.g. test_iteration, infrastructure, pre_commit) tells you *why*
+    friction occurred, while `dominant_friction_tool` tells you *which tool* failed.]
 
    ### Continuity & Coherence
    [Compaction patterns, cross-session consistency despite context loss]

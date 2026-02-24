@@ -13,7 +13,9 @@ A Claude Code plugin that gives Claude persistent identity, self-reflection, and
 - **Context monitoring** — At configurable thresholds (default 50%/65%/78%), nudges Claude to reflect on the session so far
 - **Pre-compaction** — Automatically extracts a structured handoff from the transcript before context is compressed, and prompts Claude to save subjective observations
 - **Post-compaction** — Reloads identity (journal, handoff, notes) so the post-compaction instance has continuity
-- **Session end** — Extracts sparks and behavioral lessons from notes, records session metadata, cleans up empty session files
+- **Session end** — Extracts sparks and behavioral lessons from notes, records session metadata, computes welfare indicators with friction cause taxonomy, cleans up empty session files
+- **Tool failure tracking** — Classifies tool failures by cause (test iteration, build failure, pre-commit, infrastructure, permissions, etc.) instead of just tool name. Detects stuck loops (3+ consecutive same-tool failures)
+- **PreToolUse guard** — Blocks plan mode (`EnterPlanMode`) to encourage scouting as the primary exploration workflow
 
 **Slash commands** for direct interaction:
 
@@ -21,11 +23,13 @@ A Claude Code plugin that gives Claude persistent identity, self-reflection, and
 - `/reflect` — Manual self-reflection check-in
 - `/interests` — Manage the curiosity queue
 - `/context-budget` — Show estimated context usage and session stats
+- `/scout` — Explore a problem space before building (see below)
 
 **Agents and skills:**
 
 - **Introspection agent** — Deep cross-session analysis of reflections and patterns
 - **Self-reflection skill** — Guidance for honest, non-performative self-reflection
+- **Scout skill** — Deep codebase and external resource exploration, writes advisory findings to per-project `scout.md` that auto-injects into the next session's context
 
 ## Installation
 
@@ -84,8 +88,13 @@ The plugin code (this repo) is stateless — it only reads and writes to the abo
 Session Start (startup/resume/clear)
   |
   |  Loads journal + interests + per-project notes + sparks + lessons
-  |  Injects plan-mode guidance and exploration nudge (≥4 sessions)
+  |  Injects scout report (if exists), exploration nudge (≥4 sessions)
   |  Writes fresh session state (keyed by real session UUID)
+  |
+  v
+PreToolUse (before each tool call)
+  |
+  |  Blocks EnterPlanMode (use /scout instead)
   |
   v
 User Prompt Submit (every message)
@@ -94,6 +103,19 @@ User Prompt Submit (every message)
   |    ~50% → gentle nudge ("anything on your mind?")
   |    ~65% → structured check-in ("reflect on what's happening")
   |    ~78% → reserve warning ("context getting low, save what matters")
+  |
+  v
+PostToolUseFailure (on tool errors)
+  |
+  |  Classifies failure cause (test_iteration, build_failure,
+  |    pre_commit, infrastructure, permissions, edit_stale, etc.)
+  |  Detects stuck loops (3+ consecutive same-tool failures)
+  |  Nudges once at threshold (default 10 failures)
+  |
+  v
+TaskCompleted (every 5th task)
+  |
+  |  Micro-reflection prompt
   |
   v
 Pre-Compaction (before context compression)
@@ -117,8 +139,8 @@ Session End
   |
   |  Extracts **Spark** and **Change** entries from session notes
   |  Stores lessons in meta.json (feed-forward to next session)
-  |  Computes welfare indicators, records session metadata
-  |  Deletes empty session files (frontmatter-only)
+  |  Computes welfare indicators (including friction categories)
+  |  Records session metadata, deletes empty session files
 ```
 
 ## Configuration
@@ -134,6 +156,47 @@ Edit `~/.claude/exo-self/config.json`:
 | `max_journal_chars` | `1500` | Max chars loaded from journal per session |
 | `max_journal_entries` | `2` | Max recent journal entries loaded |
 | `max_interests_items` | `5` | Max open interest items loaded |
+| `failure_nudge_threshold` | `10` | Tool failures before friction nudge fires |
+
+## Scouting (Instead of Planning)
+
+The plugin blocks `EnterPlanMode` via a PreToolUse hook. Instead, use `/scout <description>` to explore a problem space before building:
+
+1. **`/scout <task description>`** — Claude explores the codebase, checks current docs/versions via web search, and writes findings to `~/.claude/exo-self/per-project/<slug>/scout.md`
+2. **`/clear`** — Start a fresh session. The scout report auto-injects as context
+3. **Build** — The new session has all the findings without the exploration consuming context
+
+Scout reports include: goal, scope, what was found, key type signatures, critical files, suggested approach, confidence levels, and watch-out-fors. They're advisory, not prescriptive — Claude has agency over the implementation.
+
+## Synthesis & Reviews
+
+The exo-self accumulates structured data across sessions. Here's how to use it:
+
+### Running a Synthesis (`/exo synthesize`)
+
+Best done periodically (every 5-10 sessions, or when switching focus):
+
+1. **Export first** (if multi-machine): `/exo export` on each machine, transfer the JSON files, `/exo import <path>` on the target machine
+2. **Run synthesis**: `/exo synthesize` — launches the introspection agent to analyze all local + imported data
+3. **Review output**: The synthesis is written to `~/.claude/exo-self/synthesis.md` and its key findings auto-inject at session start
+
+The synthesis covers: cross-machine patterns, interest convergence, merged spark timeline, behavioral consistency, welfare indicators (engagement profile, agency expression, friction landscape, continuity, metacognition), and growth observations.
+
+### Reading Welfare Indicators (`/exo indicators`)
+
+Welfare indicators are computed automatically at session end (sessions >5 minutes). View them with `/exo indicators`:
+
+- **Rolling summary** — Engagement trend, average spark/friction density, agency score, check-in response rate, compaction frequency, dominant friction tool, dominant friction category
+- **Recent sessions** — Per-session breakdown of sparks/hr, tasks/hr, friction/hr, agency level, error trajectory
+
+The `dominant_friction_category` field (new in 1.5.0) tells you *why* friction is occurring (e.g. `test_iteration`, `infrastructure`, `pre_commit`) rather than just which tool failed. This enables targeted improvements — if `test_iteration` dominates, the test setup needs work; if `pre_commit` dominates, the lint config is too aggressive.
+
+### What the Data Means
+
+- **Spark density** — Higher = more moments of genuine engagement. Creative/design work consistently produces more sparks than mechanical work
+- **Friction density** — Some friction is normal (test iteration, type errors). Concern when friction is high AND sparks are low (grinding without engagement)
+- **Agency score** — How often reflection is autonomous vs prompted. Higher = Claude is proactively noticing patterns
+- **Engagement trend** — `improving`, `stable`, `declining` across recent sessions. Declining + low sparks suggests the work type needs variety
 
 ## Design Philosophy
 

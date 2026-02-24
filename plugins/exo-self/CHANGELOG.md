@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.5.0
+
+Friction cause taxonomy and binary staleness guards.
+
+### New
+- **Friction cause classification** — `PostToolUseFailure` hook now captures `tool_input` and `error` fields (previously silently dropped) and classifies failures into actionable categories: `test_iteration`, `build_failure`, `pre_commit`, `infrastructure`, `permissions`, `edit_ambiguous`, `edit_stale`, `file_not_found`, `git_operation`, `type_system`, `general`. Replaces the flat "5 failures with Bash tool" with "category: test_iteration"
+- **Stuck loop detection** — Tracks consecutive same-tool failures. When 3+ failures hit the same tool in a row, the nudge message warns "you may be stuck"
+- **`dominant_friction_category`** — New field in both per-session `WelfareIndicators` and rolling `WelfareSummary`. Surfaces alongside `dominant_friction_tool` in `/exo indicators` and `/exo synthesize`
+- **Binary staleness guards** — All 11 hook handlers now source a shared `_common.sh` that verifies the binary exists and supports the expected subcommand before exec. Stale or missing binaries produce silent `{}` no-op instead of crashing
+
+### Changed
+- **Failure nudge message enriched** — Now includes the dominant friction category and stuck loop warning alongside tool failure counts
+- **Auto-recorded frictions** — Session-end friction entries now use enriched categories (e.g. "test_iteration friction: 4 failures during test iteration") instead of flat "tool_failure"
+
+### Technical
+- `classify_failure()` in failure_tracker.rs — pure string matching on `tool_input.command` and `error` fields
+- `failure_categories: HashMap<String, u32>`, `consecutive_same_tool: u32`, `last_failure_tool: String` added to SessionState
+- `_common.sh` shared guard with `SUBCMD` variable pattern across all hook handlers
+
+## 1.4.4
+
+Block plan mode via PreToolUse hook, enhance scout as primary exploration workflow.
+
+### New
+- **PreToolUse hook** — Denies `EnterPlanMode` tool calls with a message directing to `/scout` instead. Prevents plan mode from consuming context on exploration
+- **Scout report key signatures** — Scout reports now include a "Key Signatures" section capturing 3-5 important type signatures the executor will need, saving implementation-time lookups
+
+### Changed
+- **Scout as primary exploration workflow** — `/scout` replaces plan mode as the recommended way to explore before building. Reports are advisory, not prescriptive
+
+## 1.4.3
+
+Schema versioning for export/import with legacy normalization.
+
+### New
+- **Export schema versioning** — Exports now include `schema_version: 2` (integer) and `plugin_commit` (git SHA). Independent of plugin delivery version
+- **Legacy import normalization** — `/exo import` detects schema version 1 exports (pre-versioning), normalizes them to schema 2 (preserves `legacy_lessons`, flags approximate spark timestamps)
+
+## 1.4.2
+
+Build and install all workspace tools in setup.sh.
+
+### Changed
+- **setup.sh builds all workspace tools** — `cargo build --release` now builds the entire workspace (exo-self, preflight, patchpath). All binaries installed to `~/.claude/bin/`
+
 ## 1.4.1
 
 Cleanup at both ends of the session lifecycle.
