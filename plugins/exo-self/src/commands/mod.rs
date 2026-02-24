@@ -3,6 +3,7 @@ pub mod extract_handoff;
 pub mod failure_tracker;
 pub mod post_compact;
 pub mod pre_compact;
+pub mod pre_tool_use;
 pub mod session_end;
 pub mod session_start;
 pub mod statusline;

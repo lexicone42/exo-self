@@ -2,21 +2,14 @@ use crate::hook_io::{self, HookInput};
 use crate::markdown;
 use crate::paths::ExoPaths;
 use crate::project;
-use crate::state::SessionState;
 
 pub fn run() {
     let input = HookInput::from_stdin();
     let paths = ExoPaths::new();
 
     if input.agent_type.eq_ignore_ascii_case("plan") {
-        // Latch plan_mode_used on first Plan subagent
-        if !input.session_id.is_empty() {
-            let mut state = SessionState::load(&paths, &input.session_id);
-            if !state.plan_mode_used {
-                state.plan_mode_used = true;
-                state.save(&paths);
-            }
-        }
+        // Defense-in-depth: if PreToolUse hook failed to block EnterPlanMode,
+        // redirect the Plan subagent into scout mode anyway
         run_plan_as_scout(&paths, &input);
     } else {
         run_identity_context(&paths);

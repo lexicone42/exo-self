@@ -259,11 +259,11 @@ pub fn run() {
         ));
     }
 
-    // Scout mode nudge — always present, replaces plan mode
+    // Scout mode — plan mode is blocked by PreToolUse hook
     sections.push(
-        "For complex tasks, use `/scout <task>` instead of plan mode. \
-        It explores deeply (including current docs/versions), writes advisory notes, \
-        then you `/clear` to start fresh with findings as context — not as a prescriptive plan."
+        "Plan mode is disabled. For complex tasks, use `/scout <task>` — it explores the codebase \
+        deeply (including current docs/versions), writes advisory notes, then `/clear` to start \
+        fresh with findings as context. Scout reports describe landscape, not directions."
             .into(),
     );
 

@@ -76,6 +76,21 @@ pub fn decision_output(decision: &str, reason: &str) {
     );
 }
 
+/// Print a PreToolUse permission decision (allow/deny)
+pub fn pre_tool_use_decision(decision: &str, reason: &str) {
+    let out = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason
+        }
+    });
+    println!(
+        "{}",
+        serde_json::to_string(&out).unwrap_or_else(|_| "{}".into())
+    );
+}
+
 /// Print empty JSON (no-op output)
 pub fn empty_output() {
     println!("{{}}");

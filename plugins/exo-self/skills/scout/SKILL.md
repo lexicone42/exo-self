@@ -39,6 +39,10 @@ Determine the project slug from the current working directory (last two path com
 ## Goal
 What the user wants to accomplish (1-2 sentences).
 
+## Scope
+- Estimated files to touch: N
+- Change type: refactor | feature | bugfix | config | docs
+
 ## What I Found
 Key observations from exploring the codebase. What patterns exist, what's relevant, what surprised you.
 
@@ -46,6 +50,10 @@ Key observations from exploring the codebase. What patterns exist, what's releva
 The 3-5 most important type signatures the executor will need. Saves implementation-time lookups.
 - `path/to/file.rs`: `fn relevant_function(param: Type) -> ReturnType`
 - `path/to/file.rs`: `struct ImportantStruct { field: Type, ... }`
+
+## Critical Files
+Which files the executor will need to touch and their roles.
+- `path/to/file.rs` — role in this change (e.g. "entry point for X", "defines the Y struct")
 
 ## Suggested Approach
 Your recommended direction — framed as advice, not instructions. Include alternatives if you see them.
@@ -76,3 +84,10 @@ After writing the file, tell the user:
 - **Check versions with tools.** Don't write "use library X v2.3" from memory — search for the current version.
 - **Be concise.** The report will be injected into session start context. Aim for 1000-2000 chars, max 3000.
 - **Frame as advisory.** "I'd suggest..." not "Step 1: do X". The executor has agency.
+
+## Anti-patterns — do NOT do these
+
+- **Do NOT list numbered steps.** No "1. Create file X, 2. Add function Y, 3. Wire up Z." That's a plan, not a scout report.
+- **Do NOT write implementation code.** No code blocks with "add this to file X." Signatures in Key Signatures are fine; implementation is not.
+- **Do NOT give commands to run.** No "run `cargo add X`" or "execute `npm install Y`." The executor will figure out the tooling.
+- **Frame as landscape, not directions.** Describe the terrain ("there's a cliff here, a river there") — don't draw the route ("turn left at the cliff, cross the river at mile 3").

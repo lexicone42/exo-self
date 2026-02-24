@@ -22,6 +22,8 @@ pub enum Command {
     StopCheck,
     /// PreCompact — extract handoff, update compaction count
     PreCompact,
+    /// PreToolUse — block EnterPlanMode, redirect to /scout
+    PreToolUse,
     /// SubagentStart — inject identity into subagents
     SubagentStart,
     /// PostToolUseFailure — track failures as frustration signal
@@ -51,6 +53,7 @@ pub fn dispatch(cmd: Command) {
         Command::ContextMonitor => commands::context_monitor::run(),
         Command::StopCheck => commands::stop_check::run(),
         Command::PreCompact => commands::pre_compact::run(),
+        Command::PreToolUse => commands::pre_tool_use::run(),
         Command::SubagentStart => commands::subagent_start::run(),
         Command::FailureTracker => commands::failure_tracker::run(),
         Command::TaskCompleted => commands::task_completed::run(),
