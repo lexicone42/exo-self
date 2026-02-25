@@ -16,6 +16,7 @@ pub struct Meta {
     pub last_session_duration_min: Option<u32>,
     pub session_history: Vec<SessionHistoryEntry>,
     pub sparks: Vec<Spark>,
+    pub opinions: Vec<Opinion>,
     pub lessons: Vec<Lesson>,
     pub frictions: Vec<Friction>,
     pub welfare_summary: Option<WelfareSummary>,
@@ -38,6 +39,17 @@ pub struct SessionHistoryEntry {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Spark {
+    pub text: String,
+    pub project: String,
+    pub timestamp: String,
+    pub session_id: String,
+}
+
+/// An intellectual position or stance taken during a session.
+/// Unlike sparks (moments of satisfaction), opinions persist as identity —
+/// they represent what you think, not just what felt good.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Opinion {
     pub text: String,
     pub project: String,
     pub timestamp: String,

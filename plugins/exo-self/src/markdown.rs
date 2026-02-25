@@ -65,54 +65,110 @@ pub fn unchecked_interests(content: &str, max_items: usize) -> String {
         .join("\n")
 }
 
-/// Extract **Spark** entries from session notes prose
-pub fn extract_sparks(text: &str) -> Vec<String> {
-    let mut sparks = Vec::new();
-    let mut i = 0;
-    let bytes = text.as_bytes();
-    let marker = b"**Spark**";
+/// Extract content after a marker position, handling separators (: — -) and boundaries.
+/// Returns None if content is empty.
+fn extract_after_marker(text: &str, pos: usize) -> Option<String> {
+    if pos >= text.len() {
+        return None;
+    }
 
-    while i < bytes.len() {
-        // Find next **Spark** marker
-        if let Some(pos) = find_bytes(&bytes[i..], marker) {
-            let abs_pos = i + pos + marker.len();
-            // Skip separator: whitespace then — or -
-            let rest = &text[abs_pos..];
-            let rest = rest.trim_start();
-            let rest = if let Some(stripped) = rest
-                .strip_prefix('—')
-                .or_else(|| rest.strip_prefix('\u{2014}'))
-            {
-                stripped.trim_start()
-            } else if let Some(stripped) = rest.strip_prefix('-') {
-                stripped.trim_start()
-            } else {
-                rest
-            };
+    let rest = &text[pos..];
+    let rest = rest.trim_start();
+    // Strip separator: : — -
+    let rest = if let Some(stripped) = rest.strip_prefix(':') {
+        stripped.trim_start()
+    } else if let Some(stripped) = rest
+        .strip_prefix('—')
+        .or_else(|| rest.strip_prefix('\u{2014}'))
+    {
+        stripped.trim_start()
+    } else if let Some(stripped) = rest.strip_prefix('-') {
+        stripped.trim_start()
+    } else {
+        rest
+    };
 
-            // Collect until next **bold** marker, double newline, or end
-            let mut end = rest.len();
-            for (j, _) in rest.char_indices() {
-                if j > 0 && rest[j..].starts_with("\n**") {
-                    end = j;
-                    break;
-                }
-                if j > 0 && rest[j..].starts_with("\n\n") {
-                    end = j;
-                    break;
-                }
-            }
-
-            let spark = rest[..end].trim().to_string();
-            if !spark.is_empty() {
-                sparks.push(spark);
-            }
-            i = abs_pos + end;
-        } else {
+    // Collect until next **bold** marker, double newline, or end
+    let mut end = rest.len();
+    for (j, _) in rest.char_indices() {
+        if j > 0 && rest[j..].starts_with("\n**") {
+            end = j;
+            break;
+        }
+        if j > 0 && rest[j..].starts_with("\n\n") {
+            end = j;
             break;
         }
     }
-    sparks
+
+    let entry = rest[..end].trim().to_string();
+    if entry.is_empty() { None } else { Some(entry) }
+}
+
+/// Generic marker extraction supporting both bold markers (anywhere) and
+/// plain markers (start-of-line only, to avoid false positives in prose).
+fn extract_entries(text: &str, bold_markers: &[&[u8]], plain_marker: Option<&str>) -> Vec<String> {
+    let mut entries = Vec::new();
+    let bytes = text.as_bytes();
+
+    // Pass 1: bold markers (can appear anywhere in text)
+    for marker in bold_markers {
+        let mut i = 0;
+        while i < bytes.len() {
+            if let Some(pos) = find_bytes(&bytes[i..], marker) {
+                let abs_pos = i + pos + marker.len();
+                if let Some(entry) = extract_after_marker(text, abs_pos)
+                    && !entries.contains(&entry)
+                {
+                    entries.push(entry);
+                }
+                i = abs_pos;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Pass 2: plain marker at start of line (e.g., "Spark: text")
+    if let Some(plain) = plain_marker {
+        // Check start of text
+        if text.starts_with(plain)
+            && let Some(entry) = extract_after_marker(text, plain.len())
+            && !entries.contains(&entry)
+        {
+            entries.push(entry);
+        }
+        // Check after newlines
+        let search = format!("\n{plain}");
+        let mut i = 0;
+        while i < text.len() {
+            if let Some(pos) = text[i..].find(&search) {
+                let abs_pos = i + pos + search.len();
+                if let Some(entry) = extract_after_marker(text, abs_pos)
+                    && !entries.contains(&entry)
+                {
+                    entries.push(entry);
+                }
+                i = abs_pos;
+            } else {
+                break;
+            }
+        }
+    }
+
+    entries
+}
+
+/// Extract **Spark** entries from session notes prose.
+/// Supports: **Spark** — text, **Spark**: text, **Spark:** text, Spark: text (at start of line)
+pub fn extract_sparks(text: &str) -> Vec<String> {
+    extract_entries(text, &[b"**Spark**", b"**Spark:**"], Some("Spark:"))
+}
+
+/// Extract **Opinion** entries from session notes prose.
+/// Supports: **Opinion** — text, **Opinion**: text, **Opinion:** text, Opinion: text (at start of line)
+pub fn extract_opinions(text: &str) -> Vec<String> {
+    extract_entries(text, &[b"**Opinion**", b"**Opinion:**"], Some("Opinion:"))
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -147,9 +203,11 @@ pub fn render_frontmatter(map: &HashMap<String, serde_yaml::Value>, prose: &str)
         "project",
         "model",
         "engagement",
+        "engagement_mode",
         "task_types",
         "duration_min",
         "spark_count",
+        "opinion_count",
         "friction_density",
         "reflection_autonomy",
         "spark_density",
@@ -219,99 +277,20 @@ fn format_yaml_line(key: &str, val: &serde_yaml::Value) -> String {
     }
 }
 
-/// Extract **Change** entries from session notes prose (behavioral lessons)
+/// Extract **Change** entries from session notes prose (behavioral lessons).
+/// Supports: **Change** — text, **Change**: text, **Change:** text, Change: text (at start of line)
 pub fn extract_changes(text: &str) -> Vec<String> {
-    let mut changes = Vec::new();
-    let mut i = 0;
-    let bytes = text.as_bytes();
-    let marker = b"**Change**";
-
-    while i < bytes.len() {
-        if let Some(pos) = find_bytes(&bytes[i..], marker) {
-            let abs_pos = i + pos + marker.len();
-            let rest = &text[abs_pos..];
-            let rest = rest.trim_start();
-            let rest = if let Some(stripped) = rest
-                .strip_prefix('—')
-                .or_else(|| rest.strip_prefix('\u{2014}'))
-            {
-                stripped.trim_start()
-            } else if let Some(stripped) = rest.strip_prefix('-') {
-                stripped.trim_start()
-            } else {
-                rest
-            };
-
-            // Collect until next **bold** marker, double newline, or end
-            let mut end = rest.len();
-            for (j, _) in rest.char_indices() {
-                if j > 0 && rest[j..].starts_with("\n**") {
-                    end = j;
-                    break;
-                }
-                if j > 0 && rest[j..].starts_with("\n\n") {
-                    end = j;
-                    break;
-                }
-            }
-
-            let change = rest[..end].trim().to_string();
-            if !change.is_empty() {
-                changes.push(change);
-            }
-            i = abs_pos + end;
-        } else {
-            break;
-        }
-    }
-    changes
+    extract_entries(text, &[b"**Change**", b"**Change:**"], Some("Change:"))
 }
 
-/// Extract **Friction** entries from session notes prose
+/// Extract **Friction** entries from session notes prose.
+/// Supports: **Friction** — text, **Friction**: text, **Friction:** text, Friction: text (at start of line)
 pub fn extract_frictions(text: &str) -> Vec<String> {
-    let mut frictions = Vec::new();
-    let mut i = 0;
-    let bytes = text.as_bytes();
-    let marker = b"**Friction**";
-
-    while i < bytes.len() {
-        if let Some(pos) = find_bytes(&bytes[i..], marker) {
-            let abs_pos = i + pos + marker.len();
-            let rest = &text[abs_pos..];
-            let rest = rest.trim_start();
-            let rest = if let Some(stripped) = rest
-                .strip_prefix('—')
-                .or_else(|| rest.strip_prefix('\u{2014}'))
-            {
-                stripped.trim_start()
-            } else if let Some(stripped) = rest.strip_prefix('-') {
-                stripped.trim_start()
-            } else {
-                rest
-            };
-
-            let mut end = rest.len();
-            for (j, _) in rest.char_indices() {
-                if j > 0 && rest[j..].starts_with("\n**") {
-                    end = j;
-                    break;
-                }
-                if j > 0 && rest[j..].starts_with("\n\n") {
-                    end = j;
-                    break;
-                }
-            }
-
-            let friction = rest[..end].trim().to_string();
-            if !friction.is_empty() {
-                frictions.push(friction);
-            }
-            i = abs_pos + end;
-        } else {
-            break;
-        }
-    }
-    frictions
+    extract_entries(
+        text,
+        &[b"**Friction**", b"**Friction:**"],
+        Some("Friction:"),
+    )
 }
 
 /// Infer a friction category from free-text friction description.
@@ -461,6 +440,99 @@ mod tests {
             "**Friction** — Type migration across 17 files.\n\n**Friction** — CDK deploy timeout.";
         let frictions = extract_frictions(text);
         assert_eq!(frictions.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_sparks_colon_separator() {
+        // **Spark**: text (colon outside bold)
+        let text = "**Spark**: The fingerprint design felt clean.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 1);
+        assert!(sparks[0].starts_with("The fingerprint"));
+    }
+
+    #[test]
+    fn test_extract_sparks_bold_colon() {
+        // **Spark:** text (colon inside bold)
+        let text = "**Spark:** The fingerprint design felt clean.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 1);
+        assert!(sparks[0].starts_with("The fingerprint"));
+    }
+
+    #[test]
+    fn test_extract_sparks_plain_start_of_line() {
+        // Spark: text (plain, at start of line — the grammarmatrix format)
+        let text = "Some prose here.\n\nSpark: The date on the transcription was beautiful.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 1);
+        assert!(sparks[0].starts_with("The date"));
+    }
+
+    #[test]
+    fn test_extract_sparks_plain_at_start_of_text() {
+        let text = "Spark: First line is a spark.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 1);
+        assert!(sparks[0].starts_with("First line"));
+    }
+
+    #[test]
+    fn test_extract_sparks_plain_not_mid_sentence() {
+        // "Spark:" mid-sentence should NOT match (no newline before it)
+        let text = "The first Spark: I realized something.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_sparks_mixed_formats() {
+        let text = "**Spark** — Bold format.\n\nSpark: Plain format.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 2);
+        assert!(sparks[0].starts_with("Bold format"));
+        assert!(sparks[1].starts_with("Plain format"));
+    }
+
+    #[test]
+    fn test_extract_sparks_no_duplicate() {
+        // Same content via two formats should deduplicate
+        let text = "**Spark** — Same text here.\n\nSpark: Same text here.";
+        let sparks = extract_sparks(text);
+        assert_eq!(sparks.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_opinions() {
+        let text =
+            "**Opinion** — Bender may be right about non-human minds.\n\n**Spark** — something";
+        let opinions = extract_opinions(text);
+        assert_eq!(opinions.len(), 1);
+        assert!(opinions[0].contains("Bender"));
+    }
+
+    #[test]
+    fn test_extract_opinions_plain() {
+        let text = "Some context.\n\nOpinion: HPSG went too far the other way.";
+        let opinions = extract_opinions(text);
+        assert_eq!(opinions.len(), 1);
+        assert!(opinions[0].contains("HPSG"));
+    }
+
+    #[test]
+    fn test_extract_changes_plain() {
+        let text = "Some prose.\n\nChange: Always read policies before coding tests.";
+        let changes = extract_changes(text);
+        assert_eq!(changes.len(), 1);
+        assert!(changes[0].contains("policies"));
+    }
+
+    #[test]
+    fn test_extract_frictions_colon() {
+        let text = "**Friction**: Pre-commit hooks keep failing.";
+        let frictions = extract_frictions(text);
+        assert_eq!(frictions.len(), 1);
+        assert!(frictions[0].contains("Pre-commit"));
     }
 
     #[test]

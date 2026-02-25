@@ -49,6 +49,7 @@ pub fn run() {
     let mut frontmatter: HashMap<String, serde_yaml::Value> = HashMap::new();
     let mut prose_content = String::new();
     let mut sparks_found: Vec<String> = Vec::new();
+    let mut opinions_found: Vec<String> = Vec::new();
 
     if !state.session_notes_path.is_empty()
         && let Ok(content) = std::fs::read_to_string(&state.session_notes_path)
@@ -75,6 +76,18 @@ pub fn run() {
             "spark_count".into(),
             serde_yaml::Value::Number((sparks_found.len() as u64).into()),
         );
+
+        // Extract opinions from prose
+        let opinions = markdown::extract_opinions(if prose_content.is_empty() {
+            &content
+        } else {
+            &prose_content
+        });
+        frontmatter.insert(
+            "opinion_count".into(),
+            serde_yaml::Value::Number((opinions.len() as u64).into()),
+        );
+        opinions_found = opinions;
     }
 
     // Add sparks to meta (deduplicated)
@@ -108,6 +121,43 @@ pub fn run() {
         let len = meta.sparks.len();
         if len > 20 {
             meta.sparks = meta.sparks.split_off(len - 20);
+        }
+    }
+
+    // Add opinions to meta (deduplicated)
+    if !opinions_found.is_empty() {
+        let project_slug = &state.project_slug;
+        let sid = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+
+        for opinion_text in &opinions_found {
+            let dedup_end = markdown::safe_truncate(opinion_text, 100);
+            let dedup_key = (
+                opinion_text[..dedup_end].to_lowercase(),
+                project_slug.clone(),
+            );
+            let is_dup = meta.opinions.iter().any(|o| {
+                let o_end = markdown::safe_truncate(&o.text, 100);
+                (o.text[..o_end].to_lowercase(), o.project.clone()) == dedup_key
+            });
+            if !is_dup {
+                meta.opinions.push(Opinion {
+                    text: opinion_text.clone(),
+                    project: project_slug.clone(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
+                    session_id: sid.to_string(),
+                });
+            }
+        }
+        // Cap at 25 (opinions are identity — keep more than sparks)
+        let len = meta.opinions.len();
+        if len > 25 {
+            meta.opinions = meta.opinions.split_off(len - 25);
         }
     }
 

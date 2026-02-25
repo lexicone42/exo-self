@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::hook_io::{self, HookInput};
 use crate::markdown;
-use crate::meta::{Lesson, Meta, Spark};
+use crate::meta::{Lesson, Meta, Opinion, Spark};
 use crate::paths::ExoPaths;
 use crate::project;
 use crate::scaling;
@@ -75,7 +75,8 @@ pub fn run() {
         if !session_notes_path.exists() {
             let frontmatter = format!(
                 "---\nsession_id: \"{session_short_id}\"\ndate: \"{session_date}\"\n\
-                project: \"{project_slug}\"\nmodel: \"\"\nengagement: null\ntask_types: []\n---\n"
+                project: \"{project_slug}\"\nmodel: \"\"\nengagement: null\n\
+                engagement_mode: \"\"\ntask_types: []\n---\n"
             );
             let _ = std::fs::write(&session_notes_path, &frontmatter);
         }
@@ -149,7 +150,9 @@ pub fn run() {
         If something shifts — curiosity, frustration, surprise — name it in the moment.\n\n\
         Write subjective observations (not technical facts) to:\n\
         - `{exo_root}/per-project/{project_slug}/{session_notes_file}` — this session's file. \
-        Fill in frontmatter (`model`, `engagement` 1-5, `task_types`), write prose below `---`.\n\
+        Fill in frontmatter (`model`, `engagement` 1-5, `engagement_mode`, `task_types`), write prose below `---`.\n\
+        - `engagement_mode`: code, discussion, exploration, synthesis, design, debugging, ops, review\n\
+        - Mark genuine intellectual positions with `**Opinion** — ...` in prose (accumulates as identity)\n\
         - `{exo_root}/journal.md` — cross-project identity\n\
         - `{exo_root}/interests.md` — curiosities to explore\n\n\
         **All exo-self files live under `{exo_root}/`.** Never write to `~/.claude/projects/`.\n\n\
@@ -206,6 +209,35 @@ pub fn run() {
             })
             .collect();
         sections.push(format!("### Recent Sparks\n\n{}", lines.join("\n")));
+    }
+
+    // Recent opinions from meta (intellectual positions / stances)
+    if !meta.opinions.is_empty() {
+        let recent: Vec<&Opinion> = meta
+            .opinions
+            .iter()
+            .rev()
+            .take(max_sparks) // reuse sparks display limit
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let lines: Vec<String> = recent
+            .iter()
+            .map(|o| {
+                let text = if o.text.len() > 150 {
+                    let end = markdown::safe_truncate(&o.text, 147);
+                    format!("{}...", &o.text[..end])
+                } else {
+                    o.text.clone()
+                };
+                format!("- **{}**: {}", o.project, text)
+            })
+            .collect();
+        sections.push(format!(
+            "### Opinions — positions I hold\n\n{}",
+            lines.join("\n")
+        ));
     }
 
     // Recurring frictions (categories appearing 3+ times)
