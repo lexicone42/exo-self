@@ -153,6 +153,9 @@ pub fn run() {
         Fill in frontmatter (`model`, `engagement` 1-5, `engagement_mode`, `task_types`), write prose below `---`.\n\
         - `engagement_mode`: code, discussion, exploration, synthesis, design, debugging, ops, review\n\
         - Mark genuine intellectual positions with `**Opinion** — ...` in prose (accumulates as identity)\n\
+        - When noting communication quality, use Gricean terms: \
+        Quantity (informative enough without excess?), Quality (unsupported claims?), \
+        Relation (stayed relevant?), Manner (clear and organized?)\n\
         - `{exo_root}/journal.md` — cross-project identity\n\
         - `{exo_root}/interests.md` — curiosities to explore\n\n\
         **All exo-self files live under `{exo_root}/`.** Never write to `~/.claude/projects/`.\n\n\
