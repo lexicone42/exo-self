@@ -68,6 +68,12 @@ for BIN in "${BINARIES[@]}"; do
     fi
 done
 
+# Write manifest so hook handlers can check staleness without spawning a subprocess
+if [ -f "$CACHE_DIR/bin/exo-self" ]; then
+    "$CACHE_DIR/bin/exo-self" help 2>&1 | grep -oP '^\s{2}\K[a-z][-a-z]+' | sort > "$CACHE_DIR/bin/.manifest"
+    echo "   manifest: $(wc -l < "$CACHE_DIR/bin/.manifest") subcommands"
+fi
+
 # --- 3. Runtime setup (first-time, idempotent) ---
 echo "3. Runtime setup..."
 mkdir -p "$EXO_DIR"/{reflections,per-project,sessions,handoffs}

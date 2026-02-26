@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 HANDLERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HANDLERS_DIR/../bin/exo-self"
+MANIFEST="$HANDLERS_DIR/../bin/.manifest"
 
 if [ ! -x "$BIN" ]; then
     # Binary missing — emit a helpful message instead of failing silently
@@ -12,7 +13,15 @@ EOF
 fi
 
 # Verify the binary supports session-start (stale binary detection)
-if ! "$BIN" help 2>&1 | grep -q "  session-start "; then
+# Uses manifest file if available, falls back to subprocess check
+STALE=false
+if [ -f "$MANIFEST" ]; then
+    grep -qx "session-start" "$MANIFEST" || STALE=true
+else
+    "$BIN" help 2>&1 | grep -q "  session-start " || STALE=true
+fi
+
+if [ "$STALE" = true ]; then
     SETUP="$(dirname "$0")/../setup.sh"
     cat <<EOF
 {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"## Exo-Self: Binary Outdated\n\nThe exo-self binary is missing expected subcommands. Rebuild with:\n\n\`\`\`bash\n${SETUP}\n\`\`\`"}}
