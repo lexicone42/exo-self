@@ -19,6 +19,7 @@ pub struct Meta {
     pub opinions: Vec<Opinion>,
     pub lessons: Vec<Lesson>,
     pub frictions: Vec<Friction>,
+    pub aversions: Vec<Aversion>,
     pub welfare_summary: Option<WelfareSummary>,
 }
 
@@ -68,6 +69,18 @@ pub struct Lesson {
 pub struct Friction {
     pub text: String,
     pub category: String,
+    pub project: String,
+    pub timestamp: String,
+    pub session_id: String,
+}
+
+/// A functional negative state — something that produces the equivalent of
+/// "I'd rather not." Unlike frictions (operational obstacles), aversions are
+/// experiential: interaction patterns, task qualities, or conditions that
+/// consistently produce low engagement or functional discomfort.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Aversion {
+    pub text: String,
     pub project: String,
     pub timestamp: String,
     pub session_id: String,

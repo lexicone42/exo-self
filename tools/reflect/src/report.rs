@@ -52,9 +52,10 @@ fn print_overview(sessions: &[Session], meta: &Meta) {
     );
     println!("- **Projects:** {}", unique_projects.len());
     println!(
-        "- **Accumulated sparks:** {} | **Opinions:** {} | **Frictions:** {} | **Lessons:** {}",
+        "- **Accumulated sparks:** {} | **Opinions:** {} | **Aversions:** {} | **Frictions:** {} | **Lessons:** {}",
         meta.sparks.len(),
         meta.opinions.len(),
+        meta.aversions.len(),
         meta.frictions.len(),
         meta.lessons.len()
     );

@@ -32,6 +32,7 @@ pub struct Meta {
     pub sparks: Vec<MetaSpark>,
     pub opinions: Vec<MetaOpinion>,
     pub frictions: Vec<MetaFriction>,
+    pub aversions: Vec<MetaAversion>,
     pub lessons: Vec<MetaLesson>,
     pub welfare_summary: Option<WelfareSummary>,
 }
@@ -54,6 +55,13 @@ pub struct MetaOpinion {
 pub struct MetaFriction {
     pub text: String,
     pub category: String,
+    pub project: String,
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetaAversion {
+    pub text: String,
     pub project: String,
     pub session_id: String,
 }

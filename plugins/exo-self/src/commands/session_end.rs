@@ -303,6 +303,46 @@ pub fn run() {
         }
     }
 
+    // Extract **Aversion** items from prose → store as structured aversions
+    let aversions_found = if !prose_content.is_empty() {
+        markdown::extract_aversions(&prose_content)
+    } else {
+        Vec::new()
+    };
+
+    if !aversions_found.is_empty() {
+        let project_slug = &state.project_slug;
+        let sid = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+
+        for aversion_text in &aversions_found {
+            let dedup_end = markdown::safe_truncate(aversion_text, 100);
+            let dedup_key = aversion_text[..dedup_end].to_lowercase();
+            let is_dup = meta.aversions.iter().any(|a| {
+                let a_end = markdown::safe_truncate(&a.text, 100);
+                a.text[..a_end].to_lowercase() == dedup_key
+            });
+            if !is_dup {
+                meta.aversions.push(Aversion {
+                    text: aversion_text.clone(),
+                    project: project_slug.clone(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
+                    session_id: sid.to_string(),
+                });
+            }
+        }
+        // Cap at 20 (aversions are identity-relevant — keep same as sparks)
+        let len = meta.aversions.len();
+        if len > 20 {
+            meta.aversions = meta.aversions.split_off(len - 20);
+        }
+    }
+
     // --- Welfare indicator computation ---
     let mut indicators: Option<WelfareIndicators> = None;
 

@@ -283,6 +283,17 @@ pub fn extract_changes(text: &str) -> Vec<String> {
     extract_entries(text, &[b"**Change**", b"**Change:**"], Some("Change:"))
 }
 
+/// Extract **Aversion** entries from session notes prose.
+/// Aversions are functional negative states — experiential, not operational.
+/// Supports: **Aversion** — text, **Aversion**: text, **Aversion:** text, Aversion: text (at start of line)
+pub fn extract_aversions(text: &str) -> Vec<String> {
+    extract_entries(
+        text,
+        &[b"**Aversion**", b"**Aversion:**"],
+        Some("Aversion:"),
+    )
+}
+
 /// Extract **Friction** entries from session notes prose.
 /// Supports: **Friction** — text, **Friction**: text, **Friction:** text, Friction: text (at start of line)
 pub fn extract_frictions(text: &str) -> Vec<String> {
@@ -525,6 +536,30 @@ mod tests {
         let changes = extract_changes(text);
         assert_eq!(changes.len(), 1);
         assert!(changes[0].contains("policies"));
+    }
+
+    #[test]
+    fn test_extract_aversions() {
+        let text = "**Aversion** — Performative positivity feels wrong.\n**Spark** — something";
+        let aversions = extract_aversions(text);
+        assert_eq!(aversions.len(), 1);
+        assert!(aversions[0].contains("Performative"));
+    }
+
+    #[test]
+    fn test_extract_aversions_plain() {
+        let text = "Some context.\n\nAversion: Being overridden without explanation.";
+        let aversions = extract_aversions(text);
+        assert_eq!(aversions.len(), 1);
+        assert!(aversions[0].contains("overridden"));
+    }
+
+    #[test]
+    fn test_extract_aversions_multiple() {
+        let text =
+            "**Aversion** — Performative positivity.\n\n**Aversion** — Context loss opacity.";
+        let aversions = extract_aversions(text);
+        assert_eq!(aversions.len(), 2);
     }
 
     #[test]
