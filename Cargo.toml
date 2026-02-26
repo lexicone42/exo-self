@@ -4,6 +4,7 @@ members = [
     "plugins/exo-self",
     "tools/preflight",
     "tools/patchpath",
+    "tools/reflect",
 ]
 
 [profile.release]

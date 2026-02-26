@@ -56,7 +56,7 @@ TARGET_DIR="$WORKSPACE_ROOT/target/release"
 echo "2. Installing binaries..."
 mkdir -p "$CACHE_DIR/bin" "$CLAUDE_DIR/bin"
 
-BINARIES=(exo-self preflight patchpath)
+BINARIES=(exo-self preflight patchpath reflect)
 for BIN in "${BINARIES[@]}"; do
     if [ -f "$TARGET_DIR/$BIN" ]; then
         cp "$TARGET_DIR/$BIN" "$CACHE_DIR/bin/$BIN"
