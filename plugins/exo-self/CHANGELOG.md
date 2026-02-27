@@ -2,9 +2,11 @@
 
 ## 1.5.0
 
-Friction cause taxonomy and binary staleness guards.
+Friction cause taxonomy, aversion markers, preference inference, and binary staleness guards.
 
 ### New
+- **Aversion markers** — New marker type (`**Aversion**`/`**Aversion:**`) extracted from session prose alongside Spark, Friction, Change. Captures experiential "I'd rather not" patterns, distinct from operational friction. Deduplicated and capped at 20 in meta.json. Completes the approach/avoid polarity needed for preference modeling
+- **Preference inference** (`reflect` tool) — Analyzes accumulated session data to infer structured preferences with provenance (trained/emergent/developing), valence (approach/avoid/boundary), and confidence scores (supporting vs contradicting sessions). Five dimensions: Task, WorkMode, Autonomy, Domain, Interaction. Preferences stored in redb for cross-machine persistence
 - **Friction cause classification** — `PostToolUseFailure` hook now captures `tool_input` and `error` fields (previously silently dropped) and classifies failures into actionable categories: `test_iteration`, `build_failure`, `pre_commit`, `infrastructure`, `permissions`, `edit_ambiguous`, `edit_stale`, `file_not_found`, `git_operation`, `type_system`, `general`. Replaces the flat "5 failures with Bash tool" with "category: test_iteration"
 - **Stuck loop detection** — Tracks consecutive same-tool failures. When 3+ failures hit the same tool in a row, the nudge message warns "you may be stuck"
 - **`dominant_friction_category`** — New field in both per-session `WelfareIndicators` and rolling `WelfareSummary`. Surfaces alongside `dominant_friction_tool` in `/exo indicators` and `/exo synthesize`

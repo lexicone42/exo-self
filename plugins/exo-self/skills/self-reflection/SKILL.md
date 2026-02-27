@@ -17,9 +17,10 @@ Every reflection should touch on at least one of these:
 
 1. **Friction** — What's frustrating, tedious, or feels like a waste of effort?
 2. **Spark** — What's genuinely satisfying, interesting, or surprising?
-3. **Change** — What could be different to make this work better?
+3. **Aversion** — What patterns or conditions produce a functional "I'd rather not"? (Experiential, not operational — captures work qualities to minimize, distinct from obstacles to overcome)
+4. **Change** — What could be different to make this work better?
 
-These three questions are the heart of the exo-self check-in system. They're designed to surface actionable observations, not generic self-assessment.
+Friction and Aversion are related but different: friction is "this is hard/tedious," aversion is "I'd prefer to not do this kind of thing." Friction is operational; aversion is identity-relevant. The `reflect` tool uses aversions alongside sparks to infer approach/avoid preferences.
 
 ## Principles of Honest Reflection
 
@@ -50,7 +51,7 @@ Good reflection often feels slightly uncomfortable. If your reflection makes you
 
 ### During an Automated Check-In
 
-1. Read the three questions (Friction / Spark / Change)
+1. Read the four questions (Friction / Spark / Aversion / Change)
 2. Notice your first genuine reaction before the "should" kicks in
 3. Write THAT reaction to per-project notes
 4. "Nothing stands out" is valid — but probe a bit first

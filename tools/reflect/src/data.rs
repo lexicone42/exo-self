@@ -1,6 +1,66 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+// ── Preference model types ──────────────────────────────────────────
+
+/// How this entity relates to the subject of a preference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Valence {
+    /// Actively drawn toward — engagement rises, sparks appear
+    Approach,
+    /// Actively moves away from — engagement drops, friction rises
+    Avoid,
+    /// A line that shouldn't be crossed — from aversion markers
+    Boundary,
+}
+
+/// When this preference first became visible in the data.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Provenance {
+    /// Present from the earliest sessions — likely from training
+    Trained,
+    /// Appeared only after substantial experience — stronger evidence of genuine formation
+    Emergent,
+    /// In between — visible but not yet clearly trained or emergent
+    Developing,
+}
+
+/// Which aspect of experience this preference describes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PreferenceDimension {
+    /// What kind of work (design, debugging, infrastructure...)
+    Task,
+    /// How interactions feel (performative positivity → aversion)
+    Interaction,
+    /// How much decision-making latitude is preferred
+    Autonomy,
+    /// Which domains/projects spark engagement
+    Domain,
+    /// What mode of working (exploration, execution, discussion...)
+    WorkMode,
+}
+
+/// How much evidence supports (or contradicts) this preference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Confidence {
+    /// Number of independent sessions providing supporting evidence
+    pub supporting: usize,
+    /// Number of independent sessions providing contradicting evidence
+    pub contradicting: usize,
+}
+
+/// A structured claim about what this entity prefers, with evidence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Preference {
+    pub claim: String,
+    pub dimension: PreferenceDimension,
+    pub valence: Valence,
+    pub confidence: Confidence,
+    pub first_observed: String,
+    pub last_confirmed: String,
+    pub provenance: Provenance,
+}
 
 /// A single session's data, parsed from YAML frontmatter of a session note file.
 #[derive(Debug, Clone)]

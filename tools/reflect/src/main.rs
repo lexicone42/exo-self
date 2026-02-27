@@ -57,6 +57,19 @@ fn run_ingest(exo_dir: &std::path::Path) {
         }
     }
 
+    // Synthesize and store preferences
+    if !sessions.is_empty() {
+        let preferences = analysis::infer_preferences(&sessions, &meta);
+        let machine_id = db::list_machines(&database)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "local".to_string());
+        match db::store_preferences(&database, &machine_id, &preferences) {
+            Ok(n) => eprintln!("Stored {n} inferred preferences"),
+            Err(e) => eprintln!("Error storing preferences: {e}"),
+        }
+    }
+
     eprintln!("\nDatabase: {}", exo_dir.join("reflect.redb").display());
     let machines = db::list_machines(&database);
     eprintln!("Machines: {}", machines.join(", "));
@@ -132,6 +145,7 @@ fn run_analysis(sessions: &[data::Session], meta: &data::Meta) {
     let temporal = analysis::temporal_trends(sessions);
     let predictions = analysis::engagement_predictors(sessions);
     let spark_analysis = analysis::spark_patterns(sessions, meta);
+    let preferences = analysis::infer_preferences(sessions, meta);
 
     report::print_report(
         sessions,
@@ -142,6 +156,7 @@ fn run_analysis(sessions: &[data::Session], meta: &data::Meta) {
         &temporal,
         &predictions,
         &spark_analysis,
+        &preferences,
     );
 }
 

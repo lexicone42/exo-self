@@ -13,6 +13,9 @@ const SPARKS: TableDefinition<&str, &str> = TableDefinition::new("sparks");
 /// Metadata table for tracking ingest state. Key: name. Value: value.
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 
+/// Preferences table. Key: "{machine_id}:{dimension}:{hash}". Value: JSON-serialized Preference.
+const PREFERENCES: TableDefinition<&str, &str> = TableDefinition::new("preferences");
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SessionRecord {
     pub machine_id: String,
@@ -416,6 +419,73 @@ pub fn list_machines(db: &Database) -> Vec<String> {
     let mut result: Vec<String> = machines.into_iter().collect();
     result.sort();
     result
+}
+
+/// Store synthesized preferences in the database
+pub fn store_preferences(
+    db: &Database,
+    machine_id: &str,
+    preferences: &[crate::data::Preference],
+) -> Result<usize, redb::Error> {
+    let txn = db.begin_write()?;
+    let mut count = 0;
+    {
+        let mut table = txn.open_table(PREFERENCES)?;
+
+        // Clear existing preferences for this machine (full resync each time)
+        let mut to_remove = Vec::new();
+        if let Ok(iter) = table.iter() {
+            for entry in iter {
+                if let Ok((key, _)) = entry
+                    && key.value().starts_with(machine_id)
+                {
+                    to_remove.push(key.value().to_string());
+                }
+            }
+        }
+        for key in &to_remove {
+            table.remove(key.as_str())?;
+        }
+
+        for (i, pref) in preferences.iter().enumerate() {
+            let key = format!("{machine_id}:pref:{i:03}");
+            let json = serde_json::to_string(pref).unwrap_or_default();
+            table.insert(key.as_str(), json.as_str())?;
+            count += 1;
+        }
+    }
+
+    {
+        let mut meta_table = txn.open_table(META)?;
+        let ts_key = format!("preferences_updated:{machine_id}");
+        let now = chrono_now();
+        meta_table.insert(ts_key.as_str(), now.as_str())?;
+    }
+
+    txn.commit()?;
+    Ok(count)
+}
+
+/// Read all preferences from the database
+pub fn read_preferences(db: &Database) -> Vec<crate::data::Preference> {
+    let Ok(txn) = db.begin_read() else {
+        return Vec::new();
+    };
+    let Ok(table) = txn.open_table(PREFERENCES) else {
+        return Vec::new();
+    };
+
+    let mut prefs = Vec::new();
+    if let Ok(iter) = table.iter() {
+        for entry in iter {
+            if let Ok((_key, value)) = entry
+                && let Ok(pref) = serde_json::from_str::<crate::data::Preference>(value.value())
+            {
+                prefs.push(pref);
+            }
+        }
+    }
+    prefs
 }
 
 /// Read the local machine_id from config.json

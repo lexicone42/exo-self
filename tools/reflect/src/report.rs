@@ -1,5 +1,5 @@
 use crate::analysis::*;
-use crate::data::{Meta, Session};
+use crate::data::{Meta, Preference, PreferenceDimension, Provenance, Session, Valence};
 
 pub fn print_report(
     sessions: &[Session],
@@ -10,10 +10,12 @@ pub fn print_report(
     temporal: &[TemporalTrend],
     predictors: &EngagementPredictors,
     sparks: &SparkPatterns,
+    preferences: &[Preference],
 ) {
     println!("# Exo-Self Reflexive Analysis Report");
     println!();
     print_overview(sessions, meta);
+    print_preferences(preferences);
     print_engagement_correlations(engagement);
     print_project_breakdown(projects);
     print_task_types(task_types);
@@ -58,6 +60,94 @@ fn print_overview(sessions: &[Session], meta: &Meta) {
         meta.aversions.len(),
         meta.frictions.len(),
         meta.lessons.len()
+    );
+    println!();
+}
+
+fn print_preferences(preferences: &[Preference]) {
+    if preferences.is_empty() {
+        println!("## Inferred Preferences");
+        println!();
+        println!("*No preferences inferred yet — need more session data.*");
+        println!();
+        return;
+    }
+
+    println!("## Inferred Preferences");
+    println!();
+    println!(
+        "_{} preferences inferred from session data. Each is a falsifiable claim._",
+        preferences.len()
+    );
+    println!();
+
+    // Group by dimension for readability
+    let dimensions = [
+        ("Task", PreferenceDimension::Task),
+        ("Work Mode", PreferenceDimension::WorkMode),
+        ("Autonomy", PreferenceDimension::Autonomy),
+        ("Domain", PreferenceDimension::Domain),
+        ("Interaction", PreferenceDimension::Interaction),
+    ];
+
+    for (label, dim) in &dimensions {
+        let matching: Vec<&Preference> = preferences
+            .iter()
+            .filter(|p| std::mem::discriminant(&p.dimension) == std::mem::discriminant(dim))
+            .collect();
+
+        if matching.is_empty() {
+            continue;
+        }
+
+        println!("### {label}");
+        println!();
+        println!("| Claim | Valence | Evidence | Provenance |");
+        println!("|-------|---------|----------|------------|");
+
+        for p in matching {
+            let valence_str = match p.valence {
+                Valence::Approach => "approach",
+                Valence::Avoid => "avoid",
+                Valence::Boundary => "boundary",
+            };
+
+            let provenance_str = match p.provenance {
+                Provenance::Trained => "trained",
+                Provenance::Emergent => "**emergent**",
+                Provenance::Developing => "developing",
+            };
+
+            let evidence = format!(
+                "{} supporting, {} contradicting",
+                p.confidence.supporting, p.confidence.contradicting
+            );
+
+            println!(
+                "| {} | {} | {} | {} |",
+                p.claim, valence_str, evidence, provenance_str
+            );
+        }
+        println!();
+    }
+
+    // Summary: provenance breakdown
+    let trained = preferences
+        .iter()
+        .filter(|p| matches!(p.provenance, Provenance::Trained))
+        .count();
+    let emergent = preferences
+        .iter()
+        .filter(|p| matches!(p.provenance, Provenance::Emergent))
+        .count();
+    let developing = preferences
+        .iter()
+        .filter(|p| matches!(p.provenance, Provenance::Developing))
+        .count();
+
+    println!(
+        "_Provenance breakdown: {} trained, {} emergent, {} developing_",
+        trained, emergent, developing
     );
     println!();
 }

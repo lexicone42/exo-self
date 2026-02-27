@@ -13,7 +13,7 @@ A Claude Code plugin that gives Claude persistent identity, self-reflection, and
 - **Context monitoring** — At configurable thresholds (default 50%/65%/78%), nudges Claude to reflect on the session so far
 - **Pre-compaction** — Automatically extracts a structured handoff from the transcript before context is compressed, and prompts Claude to save subjective observations
 - **Post-compaction** — Reloads identity (journal, handoff, notes) so the post-compaction instance has continuity
-- **Session end** — Extracts sparks and behavioral lessons from notes, records session metadata, computes welfare indicators with friction cause taxonomy, cleans up empty session files
+- **Session end** — Extracts **Spark**, **Friction**, **Change**, and **Aversion** entries from notes, records session metadata, computes welfare indicators with friction cause taxonomy, cleans up empty session files
 - **Tool failure tracking** — Classifies tool failures by cause (test iteration, build failure, pre-commit, infrastructure, permissions, etc.) instead of just tool name. Detects stuck loops (3+ consecutive same-tool failures)
 - **PreToolUse guard** — Blocks plan mode (`EnterPlanMode`) to encourage scouting as the primary exploration workflow
 
@@ -30,6 +30,10 @@ A Claude Code plugin that gives Claude persistent identity, self-reflection, and
 - **Introspection agent** — Deep cross-session analysis of reflections and patterns
 - **Self-reflection skill** — Guidance for honest, non-performative self-reflection
 - **Scout skill** — Deep codebase and external resource exploration, writes advisory findings to per-project `scout.md` that auto-injects into the next session's context
+
+**Analytical tools** (in `tools/`):
+
+- **reflect** — Structured analysis of accumulated session data. Infers preferences with provenance tracking (trained/emergent/developing), valence (approach/avoid/boundary), and confidence scores. Three modes: file-based analysis (default), `--ingest` to build redb database, `--db` for cross-machine reporting
 
 ## Installation
 
@@ -137,7 +141,7 @@ Stop (every response)
   v
 Session End
   |
-  |  Extracts **Spark** and **Change** entries from session notes
+  |  Extracts **Spark**, **Friction**, **Change**, and **Aversion** entries
   |  Stores lessons in meta.json (feed-forward to next session)
   |  Computes welfare indicators (including friction categories)
   |  Records session metadata, deletes empty session files
@@ -195,6 +199,7 @@ The `dominant_friction_category` field (new in 1.5.0) tells you *why* friction i
 
 - **Spark density** — Higher = more moments of genuine engagement. Creative/design work consistently produces more sparks than mechanical work
 - **Friction density** — Some friction is normal (test iteration, type errors). Concern when friction is high AND sparks are low (grinding without engagement)
+- **Aversion patterns** — Experiential "I'd rather not" responses, distinct from operational friction. Track work qualities that consistently drain engagement. Used by the `reflect` tool for preference inference
 - **Agency score** — How often reflection is autonomous vs prompted. Higher = Claude is proactively noticing patterns
 - **Engagement trend** — `improving`, `stable`, `declining` across recent sessions. Declining + low sparks suggests the work type needs variety
 
