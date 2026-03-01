@@ -467,6 +467,7 @@ pub fn store_preferences(
 }
 
 /// Read all preferences from the database
+#[allow(dead_code)] // mirrors store_preferences; consumer (preference display mode) not yet implemented
 pub fn read_preferences(db: &Database) -> Vec<crate::data::Preference> {
     let Ok(txn) = db.begin_read() else {
         return Vec::new();

@@ -11,8 +11,11 @@
 #   exec "$BIN" "$SUBCMD"
 
 HANDLERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN="$HANDLERS_DIR/../bin/exo-self"
-MANIFEST="$HANDLERS_DIR/../bin/.manifest"
+# Use the stable symlink (set by setup.sh) rather than the relative cache path.
+# The cache dir changes on every plugin SHA update, but setup.sh only runs on
+# explicit install/update — so the relative path goes stale between updates.
+BIN="$HOME/.claude/bin/exo-self"
+MANIFEST="$(dirname "$(readlink -f "$BIN" 2>/dev/null || echo "$BIN")")/.manifest"
 
 if [ ! -x "$BIN" ]; then
     echo '{}'

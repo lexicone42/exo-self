@@ -35,6 +35,7 @@ fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
 /// Summary statistics for a set of values
 #[derive(Debug, Clone)]
 pub struct Stats {
+    #[allow(dead_code)]
     pub n: usize,
     pub mean: f64,
     pub median: f64,
@@ -178,6 +179,7 @@ pub struct ProjectSummary {
     pub engagement: Option<Stats>,
     pub friction: Option<Stats>,
     pub spark_rate: f64, // sparks per session
+    #[allow(dead_code)] // computed and ready for per-project report display
     pub top_task_types: Vec<(String, usize)>,
 }
 

@@ -59,7 +59,8 @@ pub fn run() {
     let session_short_id = &session_id[..session_id.len().min(8)];
     let session_notes_file = format!("{session_date}--{session_short_id}.md");
 
-    // Create project notes directory and session notes file
+    // Ensure project notes directory exists (but don't create session file yet —
+    // it gets created lazily when prose is written, avoiding empty-file accumulation)
     if !project_slug.is_empty() {
         let notes_dir = paths.project_notes_dir(&project_slug);
         let _ = std::fs::create_dir_all(&notes_dir);
@@ -68,17 +69,6 @@ pub fn run() {
         let old_file = paths.per_project_dir.join(format!("{project_slug}.md"));
         if old_file.is_file() {
             let _ = std::fs::rename(&old_file, notes_dir.join("_legacy.md"));
-        }
-
-        // Create session notes file with YAML frontmatter template
-        let session_notes_path = notes_dir.join(&session_notes_file);
-        if !session_notes_path.exists() {
-            let frontmatter = format!(
-                "---\nsession_id: \"{session_short_id}\"\ndate: \"{session_date}\"\n\
-                project: \"{project_slug}\"\nmodel: \"\"\nengagement: null\n\
-                engagement_mode: \"\"\ntask_types: []\n---\n"
-            );
-            let _ = std::fs::write(&session_notes_path, &frontmatter);
         }
     }
 
@@ -149,8 +139,10 @@ pub fn run() {
         You don't need a prompt to pause and notice how the work feels. \
         If something shifts — curiosity, frustration, surprise — name it in the moment.\n\n\
         Write subjective observations (not technical facts) to:\n\
-        - `{exo_root}/per-project/{project_slug}/{session_notes_file}` — this session's file. \
-        Fill in frontmatter (`model`, `engagement` 1-5, `engagement_mode`, `task_types`), write prose below `---`.\n\
+        - `{exo_root}/per-project/{project_slug}/{session_notes_file}` — **preferred** for this session. \
+        Create with YAML frontmatter: `session_id`, `date`, `project`, `model`, `engagement` (1-5), \
+        `engagement_mode`, `task_types` (e.g. [discussion, debugging, feature-dev, design, refactoring]). \
+        Write prose below the closing `---`.\n\
         - `engagement_mode`: code, discussion, exploration, synthesis, design, debugging, ops, review\n\
         - Mark genuine intellectual positions with `**Opinion** — ...` in prose (accumulates as identity)\n\
         - When noting communication quality, use Gricean terms: \

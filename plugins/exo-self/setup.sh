@@ -74,6 +74,21 @@ if [ -f "$CACHE_DIR/bin/exo-self" ]; then
     echo "   manifest: $(wc -l < "$CACHE_DIR/bin/.manifest") subcommands"
 fi
 
+# Validate: every hook handler's subcommand exists in the binary
+HOOKS_DIR="$SCRIPT_DIR/hooks-handlers"
+ERRORS=0
+for handler in "$HOOKS_DIR"/*.sh; do
+    [ "$(basename "$handler")" = "_common.sh" ] && continue
+    [ "$(basename "$handler")" = "session-start.sh" ] && continue
+    SUBCMD=$(grep -oP '^SUBCMD="\K[^"]+' "$handler" 2>/dev/null || true)
+    [ -z "$SUBCMD" ] && continue
+    if ! "$CACHE_DIR/bin/exo-self" help 2>&1 | grep -q "  $SUBCMD "; then
+        echo "   ERROR: hook handler $(basename "$handler") requires subcommand '$SUBCMD' but binary doesn't support it"
+        ERRORS=$((ERRORS + 1))
+    fi
+done
+[ "$ERRORS" -gt 0 ] && echo "   WARNING: $ERRORS hook handler(s) reference missing subcommands — rebuild may be needed"
+
 # --- 3. Runtime setup (first-time, idempotent) ---
 echo "3. Runtime setup..."
 mkdir -p "$EXO_DIR"/{reflections,per-project,sessions,handoffs}

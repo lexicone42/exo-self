@@ -104,7 +104,11 @@ pub struct MetaSpark {
     pub session_id: String,
 }
 
+// Meta marker structs: fields are populated by serde deserialization from meta.json.
+// Some fields are only used for `.len()` counts currently; the full data is available
+// for future per-marker analysis (e.g. project-scoped friction breakdowns).
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MetaOpinion {
     pub text: String,
     pub project: String,
@@ -112,6 +116,7 @@ pub struct MetaOpinion {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MetaFriction {
     pub text: String,
     pub category: String,
@@ -120,6 +125,7 @@ pub struct MetaFriction {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MetaAversion {
     pub text: String,
     pub project: String,
@@ -127,6 +133,7 @@ pub struct MetaAversion {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MetaLesson {
     pub text: String,
     pub project: String,
