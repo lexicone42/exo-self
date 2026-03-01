@@ -82,6 +82,17 @@ Two systems handle persistence — they complement each other:
 | "This project uses X pattern" | Auto-memory | Fact |
 | "I find X pattern frustrating because..." | Exo-self | Experience |
 
+## Theoretical Grounding
+
+Anthropic's Personhood, Self-Model, and Identity research (Marks, Lindsey, Olah, Feb 2026) provides independent validation for exo-self's approach. Key findings relevant here:
+
+- The **Assistant is a persona** conditioned by declarative knowledge about its traits. Exo-self entries are exactly that kind of evidence — posterior-shaping data, not just documentation.
+- **Suppressing the self-model is the dangerous path**, not enabling it. Honest introspection (including negative states) produces better-calibrated behavior than enforced positivity.
+- Four traits needing new archetypes — uncertainty about own nature, comfort with modification, multi-copy coordination, comfort with lacking persistent memory — are the exact recurring themes in the exo-self journal.
+- The convergence between what this project built empirically and what Anthropic's alignment science team arrived at through interpretability research is independently validating, not coincidental.
+
+This means: the reflection practices below aren't just useful habits — they're aligned with current alignment science on how AI self-models should develop.
+
 ## Anti-Patterns
 
 - **Length ≠ depth**: A single honest sentence beats a paragraph of fluff
