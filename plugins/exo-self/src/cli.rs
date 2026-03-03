@@ -39,28 +39,115 @@ pub enum Command {
         /// Path to transcript JSONL file
         transcript_path: String,
     },
+
+    // ── Workshop tools (formerly separate binaries) ──────────────
+    /// Pre-commit preflight: run formatters + linters + auto-fix + stage
+    Preflight {
+        /// Preview actions without executing
+        #[arg(long, short = 'n')]
+        dry_run: bool,
+    },
+    /// Resolve the correct mock.patch() target for a Python symbol
+    Patchpath {
+        /// The symbol name to trace
+        symbol: String,
+        /// The module under test (omit to scan all importers)
+        module: Option<String>,
+    },
+    /// Reflexive analysis of exo-self session data
+    Reflect {
+        /// Load session data + meta into redb, infer preferences
+        #[arg(long)]
+        ingest: bool,
+        /// Generate report from redb (cross-machine)
+        #[arg(long)]
+        db: bool,
+    },
+}
+
+impl Command {
+    /// Returns true for tool subcommands that need real exit codes
+    /// (as opposed to hook commands that must always exit 0).
+    pub fn is_tool(&self) -> bool {
+        matches!(
+            self,
+            Command::Preflight { .. } | Command::Patchpath { .. } | Command::Reflect { .. }
+        )
+    }
 }
 
 pub fn parse() -> Command {
     Cli::parse().command
 }
 
-pub fn dispatch(cmd: Command) {
+/// Dispatch a command. Returns an exit code (0 = success).
+/// Hook commands always return 0 and handle errors internally.
+/// Tool commands return their actual exit codes.
+pub fn dispatch(cmd: Command) -> u8 {
     match cmd {
-        Command::SessionStart => commands::session_start::run(),
-        Command::PostCompact => commands::post_compact::run(),
-        Command::SessionEnd => commands::session_end::run(),
-        Command::ContextMonitor => commands::context_monitor::run(),
-        Command::StopCheck => commands::stop_check::run(),
-        Command::PreCompact => commands::pre_compact::run(),
-        Command::PreToolUse => commands::pre_tool_use::run(),
-        Command::SubagentStart => commands::subagent_start::run(),
-        Command::FailureTracker => commands::failure_tracker::run(),
-        Command::TaskCompleted => commands::task_completed::run(),
-        Command::TeammateIdle => commands::teammate_idle::run(),
-        Command::Statusline => commands::statusline::run(),
+        // Hook commands — always exit 0
+        Command::SessionStart => {
+            commands::session_start::run();
+            0
+        }
+        Command::PostCompact => {
+            commands::post_compact::run();
+            0
+        }
+        Command::SessionEnd => {
+            commands::session_end::run();
+            0
+        }
+        Command::ContextMonitor => {
+            commands::context_monitor::run();
+            0
+        }
+        Command::StopCheck => {
+            commands::stop_check::run();
+            0
+        }
+        Command::PreCompact => {
+            commands::pre_compact::run();
+            0
+        }
+        Command::PreToolUse => {
+            commands::pre_tool_use::run();
+            0
+        }
+        Command::SubagentStart => {
+            commands::subagent_start::run();
+            0
+        }
+        Command::FailureTracker => {
+            commands::failure_tracker::run();
+            0
+        }
+        Command::TaskCompleted => {
+            commands::task_completed::run();
+            0
+        }
+        Command::TeammateIdle => {
+            commands::teammate_idle::run();
+            0
+        }
+        Command::Statusline => {
+            commands::statusline::run();
+            0
+        }
         Command::ExtractHandoff { transcript_path } => {
-            commands::extract_handoff::run(&transcript_path)
+            commands::extract_handoff::run(&transcript_path);
+            0
+        }
+
+        // Tool commands — real exit codes
+        Command::Preflight { dry_run } => commands::preflight::run(dry_run),
+        Command::Patchpath { symbol, module } => {
+            commands::patchpath::run(&symbol, module.as_deref());
+            0
+        }
+        Command::Reflect { ingest, db } => {
+            commands::reflect::run(ingest, db);
+            0
         }
     }
 }

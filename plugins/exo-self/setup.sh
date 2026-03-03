@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — Build exo-self + tools after marketplace install/update
+# setup.sh — Build exo-self after marketplace install/update
 #
 # Usage:
 #   claude plugin marketplace add lexicone42/exo-self   # first time
@@ -7,89 +7,78 @@
 #   ~/.claude/plugins/marketplaces/exo-self/plugins/exo-self/setup.sh
 #
 # The marketplace handles: git pull, cache sync, metadata, enabling.
-# This script handles: building Rust binaries and first-time runtime setup.
+# This script handles: building the Rust binary and first-time runtime setup.
 #
-# Binaries built: exo-self (plugin core), preflight (pre-commit), patchpath (mock.patch helper)
+# All tools (preflight, patchpath, reflect) are now subcommands of the
+# single exo-self binary. No more separate binaries or fragile symlinks.
 #
-# Prerequisites: cargo, jq
+# Prerequisites: cargo
 
 set -euo pipefail
 
 PLUGIN_NAME="exo-self"
-MARKETPLACE="exo-self"
-PLUGIN_KEY="${PLUGIN_NAME}@${MARKETPLACE}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 EXO_DIR="$CLAUDE_DIR/exo-self"
-SETTINGS_JSON="$CLAUDE_DIR/settings.json"
-INSTALLED_JSON="$CLAUDE_DIR/plugins/installed_plugins.json"
-PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
+BIN_DIR="$CLAUDE_DIR/bin"
 
 # --- Prerequisites ---
-for cmd in cargo jq; do
-    if ! command -v "$cmd" &>/dev/null; then
-        echo "ERROR: $cmd is required but not found."
-        exit 1
-    fi
-done
-
-VERSION=$(jq -r '.version' "$PLUGIN_JSON")
-
-# Resolve cache directory from installed_plugins.json (set by marketplace)
-CACHE_DIR=$(jq -r ".plugins[\"$PLUGIN_KEY\"][0].installPath // empty" "$INSTALLED_JSON" 2>/dev/null || true)
-if [ -z "$CACHE_DIR" ] || [ ! -d "$CACHE_DIR" ]; then
-    echo "ERROR: Plugin not found in installed_plugins.json."
-    echo "Run first: claude plugin marketplace add lexicone42/exo-self"
+if ! command -v cargo &>/dev/null; then
+    echo "ERROR: cargo is required but not found."
+    echo "Install Rust: https://rustup.rs"
     exit 1
 fi
 
-echo "=== exo-self setup (v${VERSION}) ==="
-
-# --- 1. Build all workspace binaries ---
-WORKSPACE_ROOT="$SCRIPT_DIR/../.."
-echo "1. Building binaries..."
-(cd "$WORKSPACE_ROOT" && cargo build --release --quiet 2>&1)
-
-TARGET_DIR="$WORKSPACE_ROOT/target/release"
-
-# --- 2. Install binaries to cache + symlink ---
-echo "2. Installing binaries..."
-mkdir -p "$CACHE_DIR/bin" "$CLAUDE_DIR/bin"
-
-BINARIES=(exo-self preflight patchpath reflect)
-for BIN in "${BINARIES[@]}"; do
-    if [ -f "$TARGET_DIR/$BIN" ]; then
-        cp "$TARGET_DIR/$BIN" "$CACHE_DIR/bin/$BIN"
-        chmod +x "$CACHE_DIR/bin/$BIN"
-        ln -sf "$CACHE_DIR/bin/$BIN" "$CLAUDE_DIR/bin/$BIN"
-        echo "   $BIN $(du -h "$TARGET_DIR/$BIN" | cut -f1) -> ~/.claude/bin/$BIN"
-    else
-        echo "   WARN: $BIN not found in $TARGET_DIR"
-    fi
-done
-
-# Write manifest so hook handlers can check staleness without spawning a subprocess
-if [ -f "$CACHE_DIR/bin/exo-self" ]; then
-    "$CACHE_DIR/bin/exo-self" help 2>&1 | grep -oP '^\s{2}\K[a-z][-a-z]+' | sort > "$CACHE_DIR/bin/.manifest"
-    echo "   manifest: $(wc -l < "$CACHE_DIR/bin/.manifest") subcommands"
+# --- 1. Detect workspace layout ---
+# Dev repo:  setup.sh is at plugins/exo-self/, workspace Cargo.toml at ../../
+# Cache:     setup.sh is at the cache root, Cargo.toml beside it (no parent workspace)
+# Check for workspace root FIRST — the plugin always has its own Cargo.toml,
+# so checking SCRIPT_DIR first would always match and miss the workspace.
+if [ -f "$SCRIPT_DIR/../../Cargo.toml" ]; then
+    WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+elif [ -f "$SCRIPT_DIR/Cargo.toml" ]; then
+    WORKSPACE_ROOT="$SCRIPT_DIR"
+else
+    echo "ERROR: Cannot find Cargo.toml in $SCRIPT_DIR or $SCRIPT_DIR/../.."
+    exit 1
 fi
 
-# Validate: every hook handler's subcommand exists in the binary
-HOOKS_DIR="$SCRIPT_DIR/hooks-handlers"
-ERRORS=0
-for handler in "$HOOKS_DIR"/*.sh; do
-    [ "$(basename "$handler")" = "_common.sh" ] && continue
-    [ "$(basename "$handler")" = "session-start.sh" ] && continue
-    SUBCMD=$(grep -oP '^SUBCMD="\K[^"]+' "$handler" 2>/dev/null || true)
-    [ -z "$SUBCMD" ] && continue
-    if ! "$CACHE_DIR/bin/exo-self" help 2>&1 | grep -q "  $SUBCMD "; then
-        echo "   ERROR: hook handler $(basename "$handler") requires subcommand '$SUBCMD' but binary doesn't support it"
-        ERRORS=$((ERRORS + 1))
-    fi
-done
-[ "$ERRORS" -gt 0 ] && echo "   WARNING: $ERRORS hook handler(s) reference missing subcommands — rebuild may be needed"
+echo "=== exo-self setup ==="
+echo "  workspace: $WORKSPACE_ROOT"
 
-# --- 3. Runtime setup (first-time, idempotent) ---
+# --- 2. Build ---
+echo "1. Building..."
+(cd "$WORKSPACE_ROOT" && cargo build --release --quiet 2>&1)
+
+# Find the binary — could be in workspace target or local target
+if [ -f "$WORKSPACE_ROOT/target/release/exo-self" ]; then
+    BUILT_BIN="$WORKSPACE_ROOT/target/release/exo-self"
+else
+    echo "ERROR: Binary not found at $WORKSPACE_ROOT/target/release/exo-self"
+    exit 1
+fi
+
+# --- 3. Install binary (copy, not symlink — survives cache rotation) ---
+echo "2. Installing..."
+mkdir -p "$BIN_DIR"
+rm -f "$BIN_DIR/exo-self"
+cp "$BUILT_BIN" "$BIN_DIR/exo-self"
+chmod +x "$BIN_DIR/exo-self"
+echo "   exo-self $(du -h "$BIN_DIR/exo-self" | cut -f1) -> $BIN_DIR/exo-self"
+
+# Create wrapper scripts for backward compatibility (pre-commit, scripts, etc.)
+# Remove old symlinks/files first to avoid "Text file busy" on active executables.
+for TOOL in preflight patchpath reflect; do
+    rm -f "$BIN_DIR/$TOOL"
+    cat > "$BIN_DIR/$TOOL" << WRAPPER
+#!/bin/sh
+exec "\$(dirname "\$0")/exo-self" $TOOL "\$@"
+WRAPPER
+    chmod +x "$BIN_DIR/$TOOL"
+done
+echo "   wrappers: preflight, patchpath, reflect"
+
+# --- 4. Runtime setup (first-time, idempotent) ---
 echo "3. Runtime setup..."
 mkdir -p "$EXO_DIR"/{reflections,per-project,sessions,handoffs}
 
@@ -114,8 +103,9 @@ if [ -f "$SCRIPT_DIR/statusline.sh" ]; then
     chmod +x "$CLAUDE_DIR/statusline.sh"
 fi
 
-# --- 4. Permissions (idempotent) ---
+# --- 5. Permissions (idempotent) ---
 echo "4. Permissions..."
+SETTINGS_JSON="$CLAUDE_DIR/settings.json"
 [ -f "$SETTINGS_JSON" ] || echo '{}' > "$SETTINGS_JSON"
 
 NEEDED_ALLOWS=(
@@ -130,17 +120,21 @@ NEEDED_ALLOWS=(
 ADDED=0
 for RULE in "${NEEDED_ALLOWS[@]}"; do
     if ! jq -e ".permissions.allow // [] | index(\"$RULE\")" "$SETTINGS_JSON" &>/dev/null; then
-        jq ".permissions.allow = ((.permissions.allow // []) + [\"$RULE\"])" "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
-        ADDED=$((ADDED + 1))
+        if command -v jq &>/dev/null; then
+            jq ".permissions.allow = ((.permissions.allow // []) + [\"$RULE\"])" "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+            ADDED=$((ADDED + 1))
+        fi
     fi
 done
 [ "$ADDED" -gt 0 ] && echo "   $ADDED permission(s) added" || echo "   ok"
 
-EXPECTED='{"type":"command","command":"~/.claude/statusline.sh","padding":0}'
-CURRENT=$(jq -c '.statusLine // {}' "$SETTINGS_JSON" 2>/dev/null)
-if [ "$CURRENT" != "$EXPECTED" ]; then
-    jq '.statusLine = {"type":"command","command":"~/.claude/statusline.sh","padding":0}' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+if command -v jq &>/dev/null; then
+    EXPECTED='{"type":"command","command":"~/.claude/statusline.sh","padding":0}'
+    CURRENT=$(jq -c '.statusLine // {}' "$SETTINGS_JSON" 2>/dev/null)
+    if [ "$CURRENT" != "$EXPECTED" ]; then
+        jq '.statusLine = {"type":"command","command":"~/.claude/statusline.sh","padding":0}' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+    fi
 fi
 
 echo ""
-echo "=== Done (v${VERSION}). Restart Claude Code to activate. ==="
+echo "=== Done. Restart Claude Code to activate. ==="

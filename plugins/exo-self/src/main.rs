@@ -13,14 +13,17 @@ mod scaling;
 mod state;
 
 fn main() {
-    // Hooks must NEVER crash — catch panics and exit clean
-    let result = panic::catch_unwind(|| {
-        let cmd = cli::parse();
-        cli::dispatch(cmd);
-    });
+    let cmd = cli::parse();
 
-    if result.is_err() {
-        // Print empty JSON so Claude Code doesn't see an error
-        println!("{{}}");
+    if cmd.is_tool() {
+        // Tool commands get real exit codes, no panic swallowing
+        let code = cli::dispatch(cmd);
+        std::process::exit(code as i32);
+    } else {
+        // Hook commands must NEVER crash — catch panics and exit clean
+        let result = panic::catch_unwind(|| cli::dispatch(cmd));
+        if result.is_err() {
+            println!("{{}}");
+        }
     }
 }

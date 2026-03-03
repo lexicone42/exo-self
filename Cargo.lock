@@ -175,11 +175,12 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "exo-self"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "chrono",
  "clap",
  "glob",
+ "redb",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -348,14 +349,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "patchpath"
-version = "0.1.0"
-
-[[package]]
-name = "preflight"
-version = "0.1.0"
-
-[[package]]
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -396,17 +389,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eca1e9d98d5a7e9002d0013e18d5a9b000aee942eb134883a82f06ebffb6c01"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "reflect"
-version = "0.1.0"
-dependencies = [
- "glob",
- "redb",
- "serde",
- "serde_json",
- "serde_yaml",
 ]
 
 [[package]]
