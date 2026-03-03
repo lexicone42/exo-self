@@ -281,6 +281,17 @@ fn format_yaml_line(key: &str, val: &serde_yaml::Value) -> String {
 /// Supports: **Change** — text, **Change**: text, **Change:** text, Change: text (at start of line)
 pub fn extract_changes(text: &str) -> Vec<String> {
     extract_entries(text, &[b"**Change**", b"**Change:**"], Some("Change:"))
+        .into_iter()
+        .filter(|s| {
+            let lower = s.to_lowercase();
+            !lower.starts_with("nothing")
+                && !lower.starts_with("none")
+                && !lower.contains("nothing actionable")
+                && !lower.contains("nothing to change")
+                && !lower.contains("nothing to note")
+                && !lower.contains("nothing behavioral")
+        })
+        .collect()
 }
 
 /// Extract **Aversion** entries from session notes prose.

@@ -296,10 +296,10 @@ pub fn run() {
                 });
             }
         }
-        // Cap at 15
+        // Cap at 20 (lessons are high-signal — worth keeping more)
         let len = meta.lessons.len();
-        if len > 15 {
-            meta.lessons = meta.lessons.split_off(len - 15);
+        if len > 20 {
+            meta.lessons = meta.lessons.split_off(len - 20);
         }
     }
 

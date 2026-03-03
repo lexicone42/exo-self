@@ -65,6 +65,13 @@ Mark confidence levels:
 - **Likely**: Consistent with what I read but not independently verified
 - **Uncertain**: My best guess — check before relying on this
 
+## Data/Integration Risks
+If this task involves data from multiple sources, think about join semantics:
+- What are the actual cardinalities? (1:1, 1:many, many:many)
+- What happens when real data violates assumed relationships?
+- Are there edge cases in the data that the schema doesn't reveal?
+Skip this section if the task is pure code with no data integration.
+
 ## Watch Out For
 Potential pitfalls, edge cases, things that could go wrong.
 

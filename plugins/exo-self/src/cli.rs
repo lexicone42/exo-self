@@ -40,6 +40,9 @@ pub enum Command {
         transcript_path: String,
     },
 
+    /// Backfill lessons from existing session notes into meta.json
+    Backfill,
+
     // ── Workshop tools (formerly separate binaries) ──────────────
     /// Pre-commit preflight: run formatters + linters + auto-fix + stage
     Preflight {
@@ -71,7 +74,10 @@ impl Command {
     pub fn is_tool(&self) -> bool {
         matches!(
             self,
-            Command::Preflight { .. } | Command::Patchpath { .. } | Command::Reflect { .. }
+            Command::Preflight { .. }
+                | Command::Patchpath { .. }
+                | Command::Reflect { .. }
+                | Command::Backfill
         )
     }
 }
@@ -147,6 +153,10 @@ pub fn dispatch(cmd: Command) -> u8 {
         }
         Command::Reflect { ingest, db } => {
             commands::reflect::run(ingest, db);
+            0
+        }
+        Command::Backfill => {
+            commands::backfill::run();
             0
         }
     }
