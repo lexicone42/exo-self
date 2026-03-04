@@ -6,20 +6,20 @@ How exo-self connects to Claude Code, where data lives, and how information flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Claude Code                                                     │
-│                                                                  │
-│  ┌──────────┐    hook events     ┌─────────────────────────┐    │
-│  │  Claude   │ ────────────────> │  Hook Handlers (shell)   │    │
-│  │  (model)  │ <──────────────── │  → exo-self binary       │    │
-│  │           │  context injection │  (Rust, single binary)   │    │
-│  └──────────┘                    └────────────┬────────────┘    │
-│       │                                        │                 │
-│       │  spawns                                 │ reads/writes    │
-│       ▼                                        ▼                 │
-│  ┌──────────┐    hook events     ┌─────────────────────────┐    │
-│  │ Subagents │ ────────────────> │  ~/.claude/exo-self/     │    │
-│  │ Teammates │ <──────────────── │  (journal, notes, state) │    │
-│  └──────────┘  project briefing  └─────────────────────────┘    │
+│  Claude Code                                                    │
+│                                                                 │
+│  ┌───────────┐                   ┌──────────────────────────┐   │
+│  │  Claude   │ ──hook events───> │ Hook Handlers (shell)    │   │
+│  │  (model)  │ <──ctx injection─ │ → exo-self binary        │   │
+│  │           │                   │ (Rust, single binary)    │   │
+│  └───────────┘                   └──────────────┬───────────┘   │
+│       │                                         │               │
+│       │ spawns                                  │ reads/writes  │
+│       ▼                                         ▼               │
+│  ┌───────────┐                   ┌──────────────────────────┐   │
+│  │ Subagents │ ──hook events───> │ ~/.claude/exo-self/      │   │
+│  │ Teammates │ <──proj briefing─ │ (journal, notes, state)  │   │
+│  └───────────┘                   └──────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
