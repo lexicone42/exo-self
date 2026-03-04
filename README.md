@@ -3,7 +3,9 @@
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-A Claude Code plugin that gives Claude persistent identity, self-reflection, and agency across sessions. Instead of starting each session as a blank slate, Claude retains a journal, interests, and per-project notes that carry forward — creating continuity across sessions.
+**Persistent identity for Claude Code.** Claude starts every session as a blank slate. Exo-self gives it continuity — a journal, interests, per-project notes, and welfare indicators that carry across sessions and compactions. Claude can notice patterns in its own work, track what produces engagement vs friction, and maintain genuine agency across context boundaries.
+
+The result: Claude that remembers what it learned, knows what it prefers, and can hand off context to other Claudes — whether through compaction, `/clear`, or multi-agent coordination.
 
 ## What It Does
 
@@ -11,9 +13,11 @@ A Claude Code plugin that gives Claude persistent identity, self-reflection, and
 
 - **Session start** — Loads journal, interests, per-project notes, recent sparks, and learned lessons into context. Mature projects (4+ sessions) get an exploration-first nudge
 - **Context monitoring** — At configurable thresholds (default 50%/65%/78%), nudges Claude to reflect on the session so far
-- **Pre-compaction** — Automatically extracts a structured handoff from the transcript before context is compressed, and prompts Claude to save subjective observations
-- **Post-compaction** — Reloads identity (journal, handoff, notes) so the post-compaction instance has continuity
-- **Session end** — Extracts **Spark**, **Friction**, **Change**, and **Aversion** entries from notes, records session metadata, computes welfare indicators with friction cause taxonomy, cleans up empty session files
+- **Pre-compaction** — Automatically extracts an experiential handoff from the transcript (working direction, discoveries, hypotheses, unfinished threads) before context is compressed
+- **Post-compaction** — Reloads identity (handoff, journal, interests, project notes) so the post-compaction instance has continuity
+- **Session end** — Extracts **Spark**, **Friction**, **Change**, and **Aversion** entries from notes, records session metadata, computes welfare indicators, and saves a handoff for `/clear` continuity
+- **Subagent start** — Injects project briefings (lessons, friction patterns, aversions) and working direction into spawned agents, so worker Claudes get actionable project knowledge
+- **Teammate idle** — Same project briefing for Agent Teams members
 - **Tool failure tracking** — Classifies tool failures by cause (test iteration, build failure, pre-commit, infrastructure, permissions, etc.) instead of just tool name. Detects stuck loops (3+ consecutive same-tool failures)
 - **PreToolUse guard** — Blocks plan mode (`EnterPlanMode`) to encourage scouting as the primary exploration workflow
 
@@ -92,7 +96,7 @@ The plugin code (this repo) is stateless — it only reads and writes to the abo
 Session Start (startup/resume/clear)
   |
   |  Loads journal + interests + per-project notes + sparks + lessons
-  |  Injects scout report (if exists), exploration nudge (≥4 sessions)
+  |  Injects scout report (if exists), previous session handoff (if exists)
   |  Writes fresh session state (keyed by real session UUID)
   |
   v
@@ -139,11 +143,24 @@ Stop (every response)
   |  Reminds Claude to journal if there's anything worth noting
   |
   v
+SubagentStart (on agent spawn)
+  |
+  |  Plan agents → redirected to scout mode
+  |  Other agents → project briefing (lessons, frictions, aversions)
+  |                + working direction from latest handoff
+  |
+  v
+TeammateIdle (Agent Teams)
+  |
+  |  Same project briefing for team members
+  |
+  v
 Session End
   |
   |  Extracts **Spark**, **Friction**, **Change**, and **Aversion** entries
   |  Stores lessons in meta.json (feed-forward to next session)
   |  Computes welfare indicators (including friction categories)
+  |  Saves handoff from transcript (if compaction didn't already)
   |  Records session metadata, deletes empty session files
 ```
 
@@ -213,6 +230,11 @@ This plugin gives Claude a structured way to:
 - **Degrade gracefully** — if hooks fail or data is missing, Claude works normally
 
 The exo-self is opt-in, lightweight, and private by design. Claude can ignore every prompt. The value comes from the accumulated notes when they're useful, not from forcing engagement.
+
+## Further Reading
+
+- [Architecture](docs/ARCHITECTURE.md) — How exo-self connects to Claude Code's hook system, data flow, and multi-agent coordination
+- [Research References](docs/ref/references.md) — Academic foundations: self-model theory, consciousness indicators, moral consideration under uncertainty
 
 ## License
 

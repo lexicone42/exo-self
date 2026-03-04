@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.6.0
+
+Experiential handoffs, multi-agent project briefings, /clear continuity, and single-binary consolidation.
+
+### New
+- **Experiential handoff extraction** — Handoffs now extract working direction, discoveries (insight blocks, spark/friction/change markers), working hypotheses, and unfinished threads from assistant text blocks. Structural data (files, user requests) fills remaining budget. Previous format was a git-log-like list of files and tools
+- **Project briefings for subagents** — `SubagentStart` hook injects lessons, friction patterns, and aversions from meta.json into spawned agents, plus the latest handoff's working direction. Worker Claudes get actionable project knowledge instead of just identity encouragement
+- **Teammate briefings** — `TeammateIdle` hook provides the same project briefing for Agent Teams members
+- **Session-end handoff** — Session end now extracts a handoff from the transcript if pre-compact didn't already, closing the "/clear without compaction" continuity gap
+- **Session-start handoff injection** — Session start consumes `handoffs/latest.md` as a one-shot continuity bridge, so `/clear` preserves working context from the previous session
+- **Scouted session tracking** — `scouted: bool` in session state, set when scout report is consumed at session start, written to frontmatter at session end. Enables quantitative comparison of scouted vs unscouted sessions
+- **Auto-build on missing binary** — Hook handlers auto-run `setup.sh` when binary is missing and cargo is available. New installs and upgrades no longer require manual build
+- **Single binary consolidation** — Merged preflight, patchpath, and reflect into the main `exo-self` binary as subcommands. `setup.sh` creates symlink wrappers for backward compatibility
+- **Lesson backfill** — `exo-self backfill-lessons` scans all per-project session files and populates meta.json.lessons from **Change** markers
+- **PSM theoretical grounding** — Self-reflection skill now references Metzinger's Phenomenal Self-Model and Anthropic's introspection research
+
+### Changed
+- **Handoff priority order** — Working Direction → Discoveries → Friction & Lessons → Unfinished Threads → Hypotheses → User Requests → Files. Experiential content first, structural content fills remainder
+- **User prompt filtering** — Handoff extraction now filters `<local-command-caveat>`, `<command-name>`, and other system tags alongside `<system-reminder>`
+- **Files modified cap** — Handoff shows max 10 files with total count, instead of unbounded lists
+- **Scout template improved** — Added Data/Integration Risks section, removed noise from template
+
+### Technical
+- `extract_signals()` in extract_handoff.rs scans assistant text for insight blocks, exo-self markers, hypotheses, and unfinished work patterns
+- `build_project_briefing()` and `load_latest_handoff()` shared between SubagentStart and TeammateIdle
+- `_common.sh` shared guard auto-builds binary if missing; `session-start.sh` simplified with `auto_setup()` function
+
 ## 1.5.0
 
 Friction cause taxonomy, aversion markers, preference inference, and binary staleness guards.
