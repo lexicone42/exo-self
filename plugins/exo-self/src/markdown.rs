@@ -210,6 +210,7 @@ pub fn render_frontmatter(map: &HashMap<String, serde_yaml::Value>, prose: &str)
         "opinion_count",
         "friction_density",
         "reflection_autonomy",
+        "scouted",
         "spark_density",
         "task_velocity",
     ];

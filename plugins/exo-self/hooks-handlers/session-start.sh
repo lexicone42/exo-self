@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
-HANDLERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN="$HANDLERS_DIR/../bin/exo-self"
-MANIFEST="$HANDLERS_DIR/../bin/.manifest"
+# Session-start hook: auto-builds if binary is missing/stale (fixes #5).
+SETUP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/setup.sh"
+BIN="$HOME/.claude/bin/exo-self"
 
-if [ ! -x "$BIN" ]; then
-    # Binary missing — emit a helpful message instead of failing silently
-    SETUP="$(dirname "$0")/../setup.sh"
+auto_setup() {
+    # Auto-run setup.sh if cargo is available; fall back to manual message if not
+    if command -v cargo &>/dev/null && [ -x "$SETUP" ]; then
+        "$SETUP" >&2 2>&1
+        [ -x "$BIN" ] && return 0
+    fi
+    # Can't auto-build — tell the user
     cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"## Exo-Self: Setup Required\n\nThe exo-self binary hasn't been built yet. Run:\n\n\`\`\`bash\n${SETUP}\n\`\`\`\n\nThis compiles the Rust binary and configures the plugin. Only needed once per machine (and after upgrades)."}}
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"## Exo-Self: Setup Required\n\nThe exo-self binary needs to be built. Run:\n\n\`\`\`bash\n${SETUP}\n\`\`\`\n\nRequires cargo (https://rustup.rs)."}}
 EOF
     exit 0
-fi
+}
 
-# Verify the binary supports session-start (stale binary detection)
-# Uses manifest file if available, falls back to subprocess check
-STALE=false
-if [ -f "$MANIFEST" ]; then
-    grep -qx "session-start" "$MANIFEST" || STALE=true
-else
-    "$BIN" help 2>&1 | grep -q "  session-start " || STALE=true
-fi
+# Binary missing → auto-build
+[ -x "$BIN" ] || auto_setup
 
-if [ "$STALE" = true ]; then
-    SETUP="$(dirname "$0")/../setup.sh"
-    cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"## Exo-Self: Binary Outdated\n\nThe exo-self binary is missing expected subcommands. Rebuild with:\n\n\`\`\`bash\n${SETUP}\n\`\`\`"}}
-EOF
-    exit 0
-fi
+# Binary stale (missing session-start subcommand) → auto-build
+"$BIN" help 2>&1 | grep -q "  session-start " || auto_setup
 
 exec "$BIN" session-start

@@ -47,6 +47,9 @@ pub struct SessionState {
     // Stop hook
     pub stop_reminded: bool,
     pub last_stop_time: f64,
+
+    // Scout tracking
+    pub scouted: bool,
 }
 
 impl Default for SessionState {
@@ -80,6 +83,7 @@ impl Default for SessionState {
             reserve_at_ratio: 0.0,
             stop_reminded: false,
             last_stop_time: 0.0,
+            scouted: false,
         }
     }
 }

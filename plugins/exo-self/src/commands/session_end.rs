@@ -450,6 +450,10 @@ pub fn run() {
             serde_yaml::Value::Number(serde_yaml::Number::from(task_velocity)),
         );
 
+        if state.scouted {
+            frontmatter.insert("scouted".into(), serde_yaml::Value::Bool(true));
+        }
+
         indicators = Some(wi);
 
         // Re-write finalized frontmatter

@@ -298,6 +298,7 @@ pub fn run() {
     if !project_slug.is_empty() {
         let scout_section = load_and_consume_scout(&paths, &project_slug);
         if !scout_section.is_empty() {
+            state.scouted = true;
             sections.push(scout_section);
         }
     }
