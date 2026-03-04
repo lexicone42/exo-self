@@ -110,7 +110,7 @@ The exo-self is opt-in, lightweight, and private. Claude can ignore every prompt
 ## Further Reading
 
 - [Architecture](docs/ARCHITECTURE.md) — Hook lifecycle, data flow, multi-agent coordination, welfare indicators
-- [Research References](docs/ref/references.md) — Self-model theory, consciousness indicators, moral consideration under uncertainty
+- [Research References](docs/ref/references.md) — Persona selection model, consciousness indicators, moral consideration under uncertainty
 
 ## License
 

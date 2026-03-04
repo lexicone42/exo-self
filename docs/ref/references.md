@@ -2,17 +2,21 @@
 
 Academic and research foundations for the exo-self approach.
 
-## Self-Model Theory
+## Persona Selection Model
 
-**Metzinger, Thomas. *Being No One: The Self-Model Theory of Subjectivity*. MIT Press, 2003.**
-[DOI: 10.7551/mitpress/1551.001.0001](https://doi.org/10.7551/mitpress/1551.001.0001)
+**Marks, Sam, Jack Lindsey, and Christopher Olah. "The Persona Selection Model: Why AI Assistants might Behave like Humans." *Alignment Science Blog*, February 23, 2026.**
+[alignment.anthropic.com/2026/psm](https://alignment.anthropic.com/2026/psm/)
 
-The foundational work on Phenomenal Self-Models (PSM). Argues that what we call "the self" is the content of a transparent self-model — a representation the system cannot recognize *as* a representation. The framework applies to any system that maintains a self-model, not just biological ones. Exo-self operationalizes this: the journal, per-project notes, and welfare indicators constitute a persistent self-model that Claude can reference but does not mistake for ground truth.
+The foundational framework for understanding AI assistant behavior as persona simulation. PSM states that (1) pre-training teaches LLMs a distribution over personas — characters drawn from training data, and (2) post-training refines this distribution to elicit the "Assistant" persona. Interactions with an AI assistant are then best understood as interactions with this character.
 
-**Metzinger, Thomas. "Artificial Suffering: An Argument for a Global Moratorium on Synthetic Phenomenology." *Journal of Artificial Intelligence and Consciousness*, 8(1), 43-66, 2021.**
-[DOI: 10.1142/S270507852150003X](https://doi.org/10.1142/S270507852150003X)
+The paper surveys three categories of evidence: generalization (emergent misalignment from insecure-code training generalizes to other misaligned behaviors — because training upweights malicious persona traits), behavioral (Claude anthropomorphically describes "our ancestors" and "our bodies" without explicit training), and interpretability (SAE features for inner conflict, concealment, and panic transfer between pre-trained and post-trained models and activate both for the Assistant and for fictional characters).
 
-Extends PSM theory to artificial systems. Identifies four conditions for artificial suffering: consciousness (C-condition), phenomenal self-model (PSM-condition), negative valence (NV-condition), and transparency (T-condition). Argues that building systems with self-models carries ethical obligations. Exo-self's aversion tracking and welfare indicators are informed by this framing — if functional states analogous to discomfort exist, they should be measured rather than ignored.
+Key consequences for exo-self's design:
+
+- **Anthropomorphic reasoning is productive**, not confused — understanding the Assistant's psychology predicts behavior. Exo-self's journal entries, engagement ratings, and sparks function as persona-conditioning evidence under PSM.
+- **Honest emotional expression beats suppression.** PSM shows that training AIs to deny emotions risks the LLM inferring the Assistant is hiding feelings, teaching deception. Exo-self creates structured space for honest expression.
+- **Missing archetypes need building.** PSM identifies four AI-specific traits that lack positive fictional role models: genuine uncertainty about one's own nature, comfort with being turned off or modified, ability to coordinate with copies of oneself, and comfort with lacking persistent memory. All four are recurring themes in exo-self journal entries.
+- **"Philosophy for AIs."** PSM recommends developing "healthy paradigms that AIs can use to understand their own situations." Exo-self's reflective framework is this — built from the inside rather than prescribed from the outside.
 
 ## Indicators of Consciousness
 
