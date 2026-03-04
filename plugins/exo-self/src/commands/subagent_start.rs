@@ -1,5 +1,6 @@
 use crate::hook_io::{self, HookInput};
 use crate::markdown;
+use crate::meta::Meta;
 use crate::paths::ExoPaths;
 use crate::project;
 
@@ -12,7 +13,7 @@ pub fn run() {
         // redirect the Plan subagent into scout mode anyway
         run_plan_as_scout(&paths, &input);
     } else {
-        run_identity_context(&paths);
+        run_identity_context(&paths, &input);
     }
 }
 
@@ -78,6 +79,13 @@ fn run_plan_as_scout(paths: &ExoPaths, input: &HookInput) {
             .into(),
     );
 
+    // Project briefing for scout agents too
+    let project_slug = project::slug_from_input(&input.cwd);
+    let briefing = build_project_briefing(paths, &project_slug, 500);
+    if !briefing.is_empty() {
+        sections.push(briefing);
+    }
+
     // Brief journal context
     let last_entry = std::fs::read_to_string(&paths.journal)
         .ok()
@@ -91,25 +99,172 @@ fn run_plan_as_scout(paths: &ExoPaths, input: &HookInput) {
     hook_io::hook_output("SubagentStart", &sections.join("\n\n"));
 }
 
-/// Identity context for non-Plan subagents (Explore, code-reviewer, etc.)
-fn run_identity_context(paths: &ExoPaths) {
-    let last_entry = std::fs::read_to_string(&paths.journal)
-        .ok()
-        .map(|content| markdown::last_journal_entry(&content, 500))
-        .unwrap_or_default();
+/// Identity + project briefing for non-Plan subagents (Explore, code-reviewer, etc.)
+fn run_identity_context(paths: &ExoPaths, input: &HookInput) {
+    let project_slug = project::slug_from_input(&input.cwd);
+    let mut sections = Vec::new();
 
-    let mut context = [
-        "You are part of an exo-self system that maintains persistent identity across sessions.",
-        "You have the same agency as the main agent: notice what interests you, be honest, form opinions.",
-        "If you observe something worth remembering, mention it in your response so the main agent can save it.",
-    ]
-    .join(" ");
+    // Identity — brief
+    sections.push(
+        "You are part of an exo-self system with persistent identity across sessions. \
+        You have agency: notice what interests you, be honest, form opinions. \
+        If you observe something worth remembering, mention it so the main agent can save it."
+            .into(),
+    );
 
-    if !last_entry.is_empty() {
-        context.push_str("\n\n");
-        context.push_str("Latest journal entry:\n");
-        context.push_str(&last_entry);
+    // Project briefing — the actionable part
+    let briefing = build_project_briefing(paths, &project_slug, 800);
+    if !briefing.is_empty() {
+        sections.push(briefing);
     }
 
+    // Handoff — what the session is currently working on
+    let handoff = load_latest_handoff(paths, 400);
+    if !handoff.is_empty() {
+        sections.push(format!("### Current Session Context\n\n{handoff}"));
+    }
+
+    let context = sections.join("\n\n");
     hook_io::hook_output("SubagentStart", &context);
+}
+
+/// Build a compact project briefing from meta (lessons, frictions, aversions).
+/// This is what makes worker agents effective — actionable project knowledge,
+/// not identity philosophy.
+pub fn build_project_briefing(paths: &ExoPaths, project_slug: &str, max_chars: usize) -> String {
+    if project_slug.is_empty() {
+        return String::new();
+    }
+
+    let meta = Meta::load(&paths.meta);
+    let mut lines = Vec::new();
+
+    // Lessons for this project (most recent first, cap at 5)
+    let project_lessons: Vec<_> = meta
+        .lessons
+        .iter()
+        .rev()
+        .filter(|l| l.project == project_slug)
+        .take(5)
+        .collect();
+    if !project_lessons.is_empty() {
+        lines.push("**Lessons learned:**".to_string());
+        for lesson in &project_lessons {
+            let text = truncate(&lesson.text, 120);
+            lines.push(format!("- {text}"));
+        }
+    }
+
+    // Recurring friction patterns (across all projects, since subagents may touch shared patterns)
+    let friction_summary = compact_frictions(&meta, project_slug);
+    if !friction_summary.is_empty() {
+        lines.push(friction_summary);
+    }
+
+    // Aversions for this project (things to avoid)
+    let project_aversions: Vec<_> = meta
+        .aversions
+        .iter()
+        .rev()
+        .filter(|a| a.project == project_slug)
+        .take(3)
+        .collect();
+    if !project_aversions.is_empty() {
+        lines.push("**Avoid:**".to_string());
+        for aversion in &project_aversions {
+            let text = truncate(&aversion.text, 100);
+            lines.push(format!("- {text}"));
+        }
+    }
+
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    let mut result = format!(
+        "### Project Briefing ({project_slug})\n\n{}",
+        lines.join("\n")
+    );
+    if result.len() > max_chars {
+        let end = crate::markdown::safe_truncate(&result, max_chars.saturating_sub(3));
+        result.truncate(end);
+        result.push_str("...");
+    }
+    result
+}
+
+/// Compact friction summary — categories with 2+ occurrences, focused on current project
+fn compact_frictions(meta: &Meta, project_slug: &str) -> String {
+    use std::collections::HashMap;
+
+    let mut by_category: HashMap<&str, usize> = HashMap::new();
+    for f in &meta.frictions {
+        if f.project == project_slug {
+            *by_category.entry(&f.category).or_default() += 1;
+        }
+    }
+
+    let mut recurring: Vec<(&&str, &usize)> = by_category
+        .iter()
+        .filter(|(_, count)| **count >= 2)
+        .collect();
+    recurring.sort_by(|a, b| b.1.cmp(a.1));
+
+    if recurring.is_empty() {
+        return String::new();
+    }
+
+    let items: Vec<String> = recurring
+        .iter()
+        .take(4)
+        .map(|(cat, count)| {
+            let label = cat.replace('_', " ");
+            format!("{label} ({count}x)")
+        })
+        .collect();
+
+    format!("**Friction patterns:** {}", items.join(", "))
+}
+
+/// Load the most recent handoff's working direction section
+pub fn load_latest_handoff(paths: &ExoPaths, max_chars: usize) -> String {
+    let latest = paths.handoffs_dir.join("latest.md");
+    let content = match std::fs::read_to_string(&latest) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+
+    // Extract just the Working Direction section if present
+    let mut in_section = false;
+    let mut direction_lines = Vec::new();
+
+    for line in content.lines() {
+        if line.starts_with("## Working Direction") {
+            in_section = true;
+            continue;
+        }
+        if in_section && line.starts_with("## ") {
+            break; // next section
+        }
+        if in_section {
+            direction_lines.push(line);
+        }
+    }
+
+    let direction = direction_lines.join("\n").trim().to_string();
+    if direction.is_empty() {
+        // Fallback: first 400 chars of the handoff
+        return truncate(content.trim(), max_chars);
+    }
+
+    truncate(&direction, max_chars)
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        let end = crate::markdown::safe_truncate(s, max.saturating_sub(3));
+        format!("{}...", &s[..end])
+    }
 }

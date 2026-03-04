@@ -1,50 +1,56 @@
+use crate::commands::subagent_start;
 use crate::hook_io::{self, HookInput};
-use crate::markdown;
 use crate::paths::ExoPaths;
 use crate::project;
 
 pub fn run() {
     let input = HookInput::from_stdin();
     let paths = ExoPaths::new();
-
-    // Get last journal entry
-    let last_entry = std::fs::read_to_string(&paths.journal)
-        .ok()
-        .map(|content| markdown::last_journal_entry(&content, 500))
-        .unwrap_or_default();
-
-    // Load most recent per-project notes
     let slug = project::slug_from_input(&input.cwd);
 
-    let project_notes_snippet = if !slug.is_empty() {
-        let dir = paths.project_notes_dir(&slug);
-        if dir.is_dir() {
-            load_newest_note(&dir, 800)
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
+    let mut sections = Vec::new();
 
-    let mut context = [
-        "You are part of an Agent Team with exo-self — persistent experiential identity across sessions.",
-        "You share agency with the team lead: notice what interests you, be honest, form opinions.",
-        "If you observe patterns worth remembering (frustrations, insights, what worked), mention them so the lead can save them to exo-self files.",
-    ]
-    .join(" ");
+    // Identity — Agent Teams framing
+    sections.push(
+        "You are part of an Agent Team with exo-self — persistent experiential identity. \
+        You share agency with the team lead: notice what interests you, be honest, form opinions. \
+        If you observe patterns worth remembering, mention them so the lead can save them."
+            .into(),
+    );
 
-    if !project_notes_snippet.is_empty() {
-        context.push_str("\n\n");
-        context.push_str("Project observations so far:\n");
-        context.push_str(&project_notes_snippet);
-    } else if !last_entry.is_empty() {
-        context.push_str("\n\n");
-        context.push_str("Latest journal entry:\n");
-        context.push_str(&last_entry);
+    // Project briefing — reuse the same builder as SubagentStart
+    let briefing = subagent_start::build_project_briefing(&paths, &slug, 800);
+    let has_briefing = !briefing.is_empty();
+    if has_briefing {
+        sections.push(briefing);
     }
 
-    hook_io::hook_output("TeammateIdle", &context);
+    // Handoff context — what the team is working on
+    let handoff = subagent_start::load_latest_handoff(&paths, 600);
+    let has_handoff = !handoff.is_empty();
+    if has_handoff {
+        sections.push(format!("### Team Context\n\n{handoff}"));
+    }
+
+    // Project notes as fallback if no briefing/handoff
+    if !has_briefing && !has_handoff {
+        let notes_snippet = if !slug.is_empty() {
+            let dir = paths.project_notes_dir(&slug);
+            if dir.is_dir() {
+                load_newest_note(&dir, 800)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        if !notes_snippet.is_empty() {
+            sections.push(format!("Project observations so far:\n{notes_snippet}"));
+        }
+    }
+
+    hook_io::hook_output("TeammateIdle", &sections.join("\n\n"));
 }
 
 fn load_newest_note(dir: &std::path::Path, max_chars: usize) -> String {

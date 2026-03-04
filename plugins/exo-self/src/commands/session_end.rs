@@ -520,6 +520,26 @@ pub fn run() {
 
     meta.save(&paths.meta);
 
+    // Extract handoff at session-end if pre_compact didn't already create one.
+    // This covers the "/clear without compaction" continuity gap.
+    let effective_sid = if session_id.is_empty() {
+        &state.session_id
+    } else {
+        session_id
+    };
+    if !input.transcript_path.is_empty()
+        && std::fs::metadata(&input.transcript_path).is_ok()
+        && !effective_sid.is_empty()
+        && !paths.handoff_file(effective_sid).exists()
+    {
+        let content = crate::commands::extract_handoff::extract(&input.transcript_path, 3000);
+        if !content.is_empty() {
+            let _ = std::fs::create_dir_all(&paths.handoffs_dir);
+            let _ = std::fs::write(paths.handoff_file(effective_sid), &content);
+            let _ = std::fs::write(paths.handoffs_dir.join("latest.md"), &content);
+        }
+    }
+
     // SessionEnd can't block — just exit clean
     hook_io::empty_output();
 }
