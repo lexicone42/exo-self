@@ -62,6 +62,14 @@ pub struct Preference {
     pub provenance: Provenance,
 }
 
+/// A phase within a session, parsed from **Phase** prose markers.
+#[derive(Debug, Clone)]
+pub struct SessionPhase {
+    pub engagement: Option<f64>,
+    pub task_types: Vec<String>,
+    pub description: String,
+}
+
 /// A single session's data, parsed from YAML frontmatter of a session note file.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -79,6 +87,7 @@ pub struct Session {
     pub spark_density: Option<f64>,
     pub task_velocity: Option<f64>,
     pub reflection_autonomy: Option<String>,
+    pub phases: Vec<SessionPhase>,
     pub has_prose: bool,
     pub prose_length: usize,
     pub file_path: PathBuf,
@@ -216,6 +225,23 @@ fn parse_session_file(path: &Path) -> Option<Session> {
         return None;
     }
 
+    // Extract phases from prose
+    let phases: Vec<SessionPhase> = if !prose.is_empty() {
+        crate::markdown::extract_phases(prose)
+            .iter()
+            .map(|text| {
+                let p = crate::markdown::parse_phase(text);
+                SessionPhase {
+                    engagement: p.engagement,
+                    task_types: p.task_types,
+                    description: p.description,
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     Some(Session {
         session_id,
         date: yaml_str_field(&fm, "date").unwrap_or_default(),
@@ -231,6 +257,7 @@ fn parse_session_file(path: &Path) -> Option<Session> {
         spark_density: yaml_f64_field(&fm, "spark_density"),
         task_velocity: yaml_f64_field(&fm, "task_velocity"),
         reflection_autonomy: yaml_str_field(&fm, "reflection_autonomy"),
+        phases,
         has_prose: !prose.is_empty(),
         prose_length: prose.len(),
         file_path: path.to_path_buf(),

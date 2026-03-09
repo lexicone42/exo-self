@@ -88,6 +88,19 @@ pub fn run() {
             serde_yaml::Value::Number((opinions.len() as u64).into()),
         );
         opinions_found = opinions;
+
+        // Extract phases from prose
+        let phase_texts = markdown::extract_phases(if prose_content.is_empty() {
+            &content
+        } else {
+            &prose_content
+        });
+        if !phase_texts.is_empty() {
+            frontmatter.insert(
+                "phase_count".into(),
+                serde_yaml::Value::Number((phase_texts.len() as u64).into()),
+            );
+        }
     }
 
     // Add sparks to meta (deduplicated)

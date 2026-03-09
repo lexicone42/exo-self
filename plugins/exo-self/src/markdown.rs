@@ -213,6 +213,7 @@ pub fn render_frontmatter(map: &HashMap<String, serde_yaml::Value>, prose: &str)
         "scouted",
         "spark_density",
         "task_velocity",
+        "phase_count",
     ];
 
     let mut yaml_lines = Vec::new();
@@ -357,6 +358,85 @@ pub fn infer_friction_category(text: &str) -> String {
         "build_failure".into()
     } else {
         "general".into()
+    }
+}
+
+/// A parsed phase entry with structured engagement data.
+#[derive(Debug, Clone)]
+pub struct Phase {
+    pub engagement: Option<f64>,
+    pub task_types: Vec<String>,
+    pub description: String,
+}
+
+/// Extract **Phase** entries from session notes prose.
+/// Supports: **Phase** (engagement: 4, [debugging]) — text, **Phase:** text, Phase: text
+pub fn extract_phases(text: &str) -> Vec<String> {
+    extract_entries(text, &[b"**Phase**", b"**Phase:**"], Some("Phase:"))
+}
+
+/// Parse structured data from a phase entry string.
+/// Expected format: "(engagement: 4, [debugging, design]) — Description text"
+/// or just plain description text without structured prefix.
+pub fn parse_phase(entry: &str) -> Phase {
+    if !entry.starts_with('(') {
+        return Phase {
+            engagement: None,
+            task_types: Vec::new(),
+            description: entry.to_string(),
+        };
+    }
+
+    let Some(paren_end) = entry.find(')') else {
+        return Phase {
+            engagement: None,
+            task_types: Vec::new(),
+            description: entry.to_string(),
+        };
+    };
+
+    let inner = &entry[1..paren_end];
+    let after = entry[paren_end + 1..].trim();
+    // Strip separator after closing paren
+    let description = after
+        .strip_prefix('—')
+        .or_else(|| after.strip_prefix('\u{2014}'))
+        .or_else(|| after.strip_prefix('-'))
+        .or_else(|| after.strip_prefix(':'))
+        .unwrap_or(after)
+        .trim()
+        .to_string();
+
+    let mut engagement = None;
+    let mut task_types = Vec::new();
+
+    // Parse engagement: N
+    if let Some(eng_pos) = inner.find("engagement:") {
+        let after_eng = inner[eng_pos + 11..].trim_start();
+        let num_end = after_eng
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(after_eng.len());
+        if let Ok(n) = after_eng[..num_end].parse::<f64>() {
+            engagement = Some(n);
+        }
+    }
+
+    // Parse [task, types]
+    if let Some(bracket_start) = inner.find('[')
+        && let Some(bracket_end) = inner[bracket_start..].find(']')
+    {
+        let types_str = &inner[bracket_start + 1..bracket_start + bracket_end];
+        task_types = types_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+
+    Phase {
+        engagement,
+        task_types,
+        description,
     }
 }
 
@@ -572,6 +652,50 @@ mod tests {
             "**Aversion** — Performative positivity.\n\n**Aversion** — Context loss opacity.";
         let aversions = extract_aversions(text);
         assert_eq!(aversions.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_phases_structured() {
+        let text = "**Phase** (engagement: 4, [debugging, design]) — Process forensics and tracing.\n\n**Phase** (engagement: 1, [babysitting]) — Download monitoring.";
+        let phases = extract_phases(text);
+        assert_eq!(phases.len(), 2);
+        let p1 = parse_phase(&phases[0]);
+        assert_eq!(p1.engagement, Some(4.0));
+        assert_eq!(p1.task_types, vec!["debugging", "design"]);
+        assert!(p1.description.starts_with("Process forensics"));
+        let p2 = parse_phase(&phases[1]);
+        assert_eq!(p2.engagement, Some(1.0));
+        assert_eq!(p2.task_types, vec!["babysitting"]);
+    }
+
+    #[test]
+    fn test_extract_phases_unstructured() {
+        let text = "**Phase** — Just a description without structured data.";
+        let phases = extract_phases(text);
+        assert_eq!(phases.len(), 1);
+        let p = parse_phase(&phases[0]);
+        assert!(p.engagement.is_none());
+        assert!(p.task_types.is_empty());
+        assert!(p.description.starts_with("Just a description"));
+    }
+
+    #[test]
+    fn test_extract_phases_engagement_only() {
+        let text = "**Phase** (engagement: 5) — Pure design work.";
+        let phases = extract_phases(text);
+        let p = parse_phase(&phases[0]);
+        assert_eq!(p.engagement, Some(5.0));
+        assert!(p.task_types.is_empty());
+        assert!(p.description.starts_with("Pure design"));
+    }
+
+    #[test]
+    fn test_extract_phases_plain_format() {
+        let text = "Some prose.\n\nPhase: Quick debugging sprint.";
+        let phases = extract_phases(text);
+        assert_eq!(phases.len(), 1);
+        let p = parse_phase(&phases[0]);
+        assert!(p.description.starts_with("Quick debugging"));
     }
 
     #[test]

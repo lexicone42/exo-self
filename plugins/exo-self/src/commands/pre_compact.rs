@@ -56,7 +56,10 @@ pub fn run() {
 
     let msg = format!(
         "## Exo-Self: Pre-Compaction (#{compaction_num}, {trigger})\n\n\
-        Handoff auto-saved. Write subjective observations to `journal.md` now if you have them."
+        Handoff auto-saved. Write subjective observations to `journal.md` now if you have them.\n\n\
+        If the work has shifted since the session started (or since the last compaction), \
+        consider writing a `**Phase**` entry to your session notes:\n\
+        `**Phase** (engagement: N, [task_types]) — Brief description of what this phase was.`"
     );
 
     hook_io::hook_output("PreCompact", &msg);

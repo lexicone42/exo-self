@@ -123,6 +123,7 @@ fn run_db_report(exo_dir: &Path) {
             spark_density: r.spark_density,
             task_velocity: r.task_velocity,
             reflection_autonomy: r.reflection_autonomy.clone(),
+            phases: Vec::new(), // redb records don't store phases yet
             has_prose: r.has_prose,
             prose_length: r.prose_length,
             file_path: std::path::PathBuf::new(),
