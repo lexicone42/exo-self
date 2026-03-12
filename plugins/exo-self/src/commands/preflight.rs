@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 struct Project {
     kind: &'static str,
@@ -152,36 +153,32 @@ fn run_python_preflight(dir: &Path, dry_run: bool) -> bool {
 
 fn run_rust_preflight(dir: &Path, dry_run: bool) -> bool {
     let mut ok = true;
+    let timeout = clippy_timeout();
 
     if which("cargo") {
         if dry_run {
             eprintln!("    would run: cargo fmt");
             eprintln!(
-                "    would run: cargo clippy --fix --allow-dirty --allow-staged --all-targets"
+                "    would run: cargo clippy --fix (changed crates only, {}s timeout)",
+                timeout.as_secs()
             );
             eprintln!("    would run: cargo fmt (second pass — clippy --fix can break formatting)");
         } else {
+            // Pass 1: fmt to normalize formatting before clippy
             eprintln!("    cargo fmt...");
             if !run_in(dir, &["cargo", "fmt"]) {
                 ok = false;
             }
-            eprintln!("    cargo clippy --fix...");
-            if !run_in(
-                dir,
-                &[
-                    "cargo",
-                    "clippy",
-                    "--fix",
-                    "--allow-dirty",
-                    "--allow-staged",
-                    "--all-targets",
-                ],
-            ) {
-                eprintln!("    clippy found unfixable issues (fixes still applied)");
-            }
-            eprintln!("    cargo fmt (post-clippy cleanup)...");
-            if !run_in(dir, &["cargo", "fmt"]) {
-                ok = false;
+
+            // Pass 2: clippy --fix with changed-crate filtering and timeout
+            let ran_clippy = run_clippy_filtered(dir, timeout);
+
+            // Pass 3: fmt again to clean up clippy's rewrites (only if clippy ran)
+            if ran_clippy {
+                eprintln!("    cargo fmt (post-clippy cleanup)...");
+                if !run_in(dir, &["cargo", "fmt"]) {
+                    ok = false;
+                }
             }
         }
     } else {
@@ -189,6 +186,183 @@ fn run_rust_preflight(dir: &Path, dry_run: bool) -> bool {
     }
 
     ok
+}
+
+/// Run clippy with changed-crate filtering (workspaces) and timeout.
+/// Returns true if clippy actually ran (so caller knows whether to re-fmt).
+fn run_clippy_filtered(dir: &Path, timeout: Duration) -> bool {
+    match changed_rust_crates(dir) {
+        Some(crates) if crates.is_empty() => {
+            eprintln!("    clippy: no changed crates, skipping");
+            false
+        }
+        Some(crates) => {
+            let crate_list = crates.join(", ");
+            eprintln!("    cargo clippy --fix -p {{{crate_list}}}...");
+            let mut cmd = Command::new("cargo");
+            cmd.args([
+                "clippy",
+                "--fix",
+                "--allow-dirty",
+                "--allow-staged",
+                "--all-targets",
+            ]);
+            for name in &crates {
+                cmd.args(["-p", name]);
+            }
+            cmd.current_dir(dir);
+            report_clippy_result(run_cmd_with_timeout(&mut cmd, timeout), timeout);
+            true
+        }
+        None => {
+            // Single crate (not a workspace) — run clippy on everything with timeout
+            eprintln!("    cargo clippy --fix...");
+            let mut cmd = Command::new("cargo");
+            cmd.args([
+                "clippy",
+                "--fix",
+                "--allow-dirty",
+                "--allow-staged",
+                "--all-targets",
+            ]);
+            cmd.current_dir(dir);
+            report_clippy_result(run_cmd_with_timeout(&mut cmd, timeout), timeout);
+            true
+        }
+    }
+}
+
+fn report_clippy_result(result: Option<bool>, timeout: Duration) {
+    match result {
+        Some(true) => {}
+        Some(false) => {
+            eprintln!("    clippy found unfixable issues (fixes still applied)");
+        }
+        None => {
+            eprintln!(
+                "    clippy timed out after {}s, skipping (set PREFLIGHT_CLIPPY_TIMEOUT to adjust)",
+                timeout.as_secs()
+            );
+        }
+    }
+}
+
+/// Detect which crate packages have changed files in a workspace.
+/// Returns `None` if this isn't a workspace (single crate — no filtering needed).
+/// Returns `Some(vec![])` if it's a workspace but no crates have changes.
+fn changed_rust_crates(dir: &Path) -> Option<Vec<String>> {
+    let cargo_toml = std::fs::read_to_string(dir.join("Cargo.toml")).ok()?;
+    if !cargo_toml.contains("[workspace]") {
+        return None;
+    }
+
+    // Get changed files: staged + unstaged
+    let staged = Command::new("git")
+        .args(["diff", "--cached", "--name-only"])
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    let unstaged = Command::new("git")
+        .args(["diff", "--name-only"])
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+
+    let mut files: Vec<String> = Vec::new();
+    for output in [&staged.stdout, &unstaged.stdout] {
+        let text = String::from_utf8_lossy(output);
+        for line in text.lines() {
+            if !line.is_empty() {
+                files.push(line.to_string());
+            }
+        }
+    }
+    files.sort();
+    files.dedup();
+
+    // Map changed files to crate package names
+    let mut crate_names: Vec<String> = Vec::new();
+    for file in &files {
+        if let Some(name) = find_crate_for_file(dir, Path::new(file))
+            && !crate_names.contains(&name)
+        {
+            crate_names.push(name);
+        }
+    }
+
+    Some(crate_names)
+}
+
+/// Walk up from a file path to find its owning crate's package name.
+fn find_crate_for_file(workspace_root: &Path, file: &Path) -> Option<String> {
+    let full = workspace_root.join(file);
+    let mut search_dir = full.parent()?.to_path_buf();
+
+    loop {
+        let cargo_toml = search_dir.join("Cargo.toml");
+        if cargo_toml.exists() {
+            return extract_package_name(&cargo_toml);
+        }
+        // Don't go above workspace root
+        if search_dir
+            == workspace_root
+                .canonicalize()
+                .unwrap_or_else(|_| workspace_root.into())
+            || !search_dir.starts_with(workspace_root)
+        {
+            break;
+        }
+        if !search_dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+/// Extract `name = "..."` from the [package] section of a Cargo.toml
+/// without pulling in a TOML parser.
+fn extract_package_name(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let mut in_package = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[package]" {
+            in_package = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            if in_package {
+                break;
+            }
+            continue;
+        }
+        if in_package
+            && let Some((key, value)) = trimmed.split_once('=')
+            && key.trim() == "name"
+        {
+            return Some(
+                value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string(),
+            );
+        }
+    }
+    None
+}
+
+/// Get clippy timeout from PREFLIGHT_CLIPPY_TIMEOUT env var (seconds), default 30s.
+fn clippy_timeout() -> Duration {
+    let secs = std::env::var("PREFLIGHT_CLIPPY_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(30);
+    Duration::from_secs(secs)
 }
 
 fn run_node_preflight(dir: &Path, dry_run: bool) -> bool {
@@ -242,6 +416,33 @@ fn run_in(dir: &Path, args: &[&str]) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+/// Spawn a command with a timeout. Returns:
+/// - `Some(true)` on success
+/// - `Some(false)` on non-zero exit
+/// - `None` on timeout (process killed)
+fn run_cmd_with_timeout(cmd: &mut Command, timeout: Duration) -> Option<bool> {
+    let mut child = match cmd.stdin(Stdio::null()).spawn() {
+        Ok(c) => c,
+        Err(_) => return Some(false),
+    };
+
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status.success()),
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait(); // reap zombie
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(_) => return Some(false),
+        }
+    }
 }
 
 fn which(cmd: &str) -> bool {
