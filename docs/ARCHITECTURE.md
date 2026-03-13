@@ -269,7 +269,7 @@ plugins/exo-self/agents/  ──>  (spawned by Agent tool)       agents run as s
 plugins/exo-self/commands/ ──> (loaded on /command)          commands expand to prompts
 ```
 
-`setup.sh` handles the build: compiles the workspace, copies the binary to `~/.claude/bin/`, creates symlink wrappers for tool binaries (`preflight`, `patchpath`, `reflect`), ensures runtime directories exist, and configures permissions.
+`setup.sh` handles the build: compiles the workspace, copies the binary to `~/.claude/bin/`, creates wrapper scripts for tool binaries (`patchpath`, `reflect`), ensures runtime directories exist, and configures permissions.
 
 **SHA-based versioning:** No version field in plugin.json. Claude Code uses the git SHA as the version identifier, so every push is auto-detectable.
 

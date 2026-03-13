@@ -223,9 +223,9 @@ fn extract_signals(
 
         // Exo-self markers: **Spark**, **Friction**, **Change**
         for prefix in ["**Spark**", "**Friction**", "**Change**"] {
-            if trimmed.starts_with(prefix) {
+            if let Some(stripped) = trimmed.strip_prefix(prefix) {
                 let label = &prefix[2..prefix.len() - 2]; // strip **
-                let rest = trimmed[prefix.len()..].trim_start_matches([' ', '—', ':', '-']);
+                let rest = stripped.trim_start_matches([' ', '—', ':', '-']);
                 if !rest.is_empty() {
                     markers.push(format!("{label}: {}", truncate(rest.trim(), 150)));
                 }

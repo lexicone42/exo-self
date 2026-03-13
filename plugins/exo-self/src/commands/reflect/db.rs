@@ -42,6 +42,7 @@ pub fn open_or_create(exo_dir: &Path) -> Result<Database, redb::DatabaseError> {
     Database::create(db_path)
 }
 
+#[allow(clippy::result_large_err)]
 pub fn ingest_local(
     db: &Database,
     sessions: &[super::data::Session],
@@ -402,6 +403,7 @@ pub fn list_machines(db: &Database) -> Vec<String> {
     result
 }
 
+#[allow(clippy::result_large_err)]
 pub fn store_preferences(
     db: &Database,
     machine_id: &str,

@@ -9,8 +9,8 @@
 # The marketplace handles: git pull, cache sync, metadata, enabling.
 # This script handles: building the Rust binary and first-time runtime setup.
 #
-# All tools (preflight, patchpath, reflect) are now subcommands of the
-# single exo-self binary. No more separate binaries or fragile symlinks.
+# Workshop tools (patchpath, reflect) are subcommands of the single
+# exo-self binary. No more separate binaries or fragile symlinks.
 #
 # Prerequisites: cargo
 
@@ -68,7 +68,7 @@ echo "   exo-self $(du -h "$BIN_DIR/exo-self" | cut -f1) -> $BIN_DIR/exo-self"
 
 # Create wrapper scripts for backward compatibility (pre-commit, scripts, etc.)
 # Remove old symlinks/files first to avoid "Text file busy" on active executables.
-for TOOL in preflight patchpath reflect; do
+for TOOL in patchpath reflect; do
     rm -f "$BIN_DIR/$TOOL"
     cat > "$BIN_DIR/$TOOL" << WRAPPER
 #!/bin/sh
@@ -76,7 +76,7 @@ exec "\$(dirname "\$0")/exo-self" $TOOL "\$@"
 WRAPPER
     chmod +x "$BIN_DIR/$TOOL"
 done
-echo "   wrappers: preflight, patchpath, reflect"
+echo "   wrappers: patchpath, reflect"
 
 # --- 4. Runtime setup (first-time, idempotent) ---
 echo "3. Runtime setup..."

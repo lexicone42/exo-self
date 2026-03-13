@@ -27,13 +27,33 @@ pub fn slug_from_path(path: &str) -> String {
     }
 }
 
-/// Load the N most recent session note files from per-project dir, capped at max_chars
+/// Load project summary + recent session notes from per-project dir, capped at max_chars.
+/// If a `_summary.md` exists, it's always included first (curated project context),
+/// then the most recent session notes fill the remaining budget.
 pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> String {
     let dir = paths.project_notes_dir(slug);
     if !dir.is_dir() {
         return String::new();
     }
 
+    let mut parts = Vec::new();
+    let mut total = 0;
+
+    // Tier 1: Always include _summary.md if it exists (curated project overview)
+    let summary_path = dir.join("_summary.md");
+    if summary_path.is_file()
+        && let Ok(text) = std::fs::read_to_string(&summary_path)
+    {
+        let (_, prose) = markdown::parse_frontmatter(&text);
+        let prose = prose.trim();
+        if !prose.is_empty() {
+            let note = format!("**Project Summary**\n\n{prose}");
+            total += note.len();
+            parts.push(note);
+        }
+    }
+
+    // Tier 2: Fill remaining budget with most recent session notes
     let pattern = dir.join("*.md");
     let pattern_str = pattern.to_string_lossy();
     let mut files: Vec<_> = glob::glob(&pattern_str)
@@ -41,6 +61,11 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         .into_iter()
         .flatten()
         .flatten()
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| !n.starts_with('_'))
+        })
         .collect();
 
     // Sort by mtime, newest first
@@ -54,10 +79,10 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         mb.cmp(&ma)
     });
 
-    let mut parts = Vec::new();
-    let mut total = 0;
+    let max_session_notes = 5;
+    let mut session_count = 0;
     for fp in &files {
-        if parts.len() >= 5 {
+        if session_count >= max_session_notes {
             break;
         }
         let text = std::fs::read_to_string(fp).unwrap_or_default();
@@ -89,6 +114,7 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         }
         total += note.len();
         parts.push(note);
+        session_count += 1;
     }
 
     parts.join("\n\n---\n\n")
@@ -102,7 +128,7 @@ pub fn cleanup_empty_notes(paths: &ExoPaths) {
         return;
     };
 
-    let skip = ["_legacy.md", "sessions.md"];
+    let skip = ["_legacy.md", "_summary.md", "sessions.md"];
 
     for project_entry in projects.flatten() {
         let project_path = project_entry.path();

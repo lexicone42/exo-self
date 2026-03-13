@@ -813,7 +813,8 @@ fn infer_autonomy_preferences(sessions: &[Session]) -> Vec<Preference> {
 }
 
 fn infer_domain_preferences(sessions: &[Session]) -> Vec<Preference> {
-    let mut by_project: HashMap<String, Vec<(f64, Option<f64>, &str, usize)>> = HashMap::new();
+    type ProjectEntries<'a> = Vec<(f64, Option<f64>, &'a str, usize)>;
+    let mut by_project: HashMap<String, ProjectEntries<'_>> = HashMap::new();
     for (idx, s) in sessions.iter().enumerate() {
         if let Some(e) = s.engagement {
             by_project.entry(s.project.clone()).or_default().push((

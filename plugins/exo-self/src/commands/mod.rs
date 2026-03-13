@@ -6,7 +6,6 @@ pub mod patchpath;
 pub mod post_compact;
 pub mod pre_compact;
 pub mod pre_tool_use;
-pub mod preflight;
 pub mod reflect;
 pub mod session_end;
 pub mod session_start;

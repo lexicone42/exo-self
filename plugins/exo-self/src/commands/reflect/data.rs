@@ -63,10 +63,12 @@ pub struct Preference {
 }
 
 /// A phase within a session, parsed from **Phase** prose markers.
+/// A phase within a session, parsed from **Phase** prose markers.
 #[derive(Debug, Clone)]
 pub struct SessionPhase {
     pub engagement: Option<f64>,
     pub task_types: Vec<String>,
+    #[allow(dead_code)] // available for future per-phase detail view
     pub description: String,
 }
 

@@ -44,12 +44,6 @@ pub enum Command {
     Backfill,
 
     // ── Workshop tools (formerly separate binaries) ──────────────
-    /// Pre-commit preflight: run formatters + linters + auto-fix + stage
-    Preflight {
-        /// Preview actions without executing
-        #[arg(long, short = 'n')]
-        dry_run: bool,
-    },
     /// Resolve the correct mock.patch() target for a Python symbol
     Patchpath {
         /// The symbol name to trace
@@ -74,10 +68,7 @@ impl Command {
     pub fn is_tool(&self) -> bool {
         matches!(
             self,
-            Command::Preflight { .. }
-                | Command::Patchpath { .. }
-                | Command::Reflect { .. }
-                | Command::Backfill
+            Command::Patchpath { .. } | Command::Reflect { .. } | Command::Backfill
         )
     }
 }
@@ -146,7 +137,6 @@ pub fn dispatch(cmd: Command) -> u8 {
         }
 
         // Tool commands — real exit codes
-        Command::Preflight { dry_run } => commands::preflight::run(dry_run),
         Command::Patchpath { symbol, module } => {
             commands::patchpath::run(&symbol, module.as_deref());
             0

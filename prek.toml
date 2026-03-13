@@ -1,0 +1,31 @@
+# prek pre-commit configuration for exo-self
+# Hooks are check-only to avoid Cargo lock contention with concurrent builds/tests.
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
+    { id = "check-added-large-files", args = ["--maxkb", "500"] },
+    { id = "check-merge-conflict" },
+    { id = "check-toml" },
+]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "cargo-fmt-check"
+name = "cargo fmt (check)"
+language = "system"
+entry = "cargo fmt --check"
+types = ["rust"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "cargo-clippy"
+name = "cargo clippy"
+language = "system"
+entry = "cargo clippy --workspace"
+types = ["rust"]
+pass_filenames = false

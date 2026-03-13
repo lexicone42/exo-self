@@ -1,6 +1,7 @@
 use super::analysis::*;
 use super::data::{Meta, Preference, PreferenceDimension, Provenance, Session, Valence};
 
+#[allow(clippy::too_many_arguments)]
 pub fn print_report(
     sessions: &[Session],
     meta: &Meta,
@@ -22,6 +23,7 @@ pub fn print_report(
     print_temporal(temporal);
     print_predictors(predictors);
     print_spark_patterns(sparks);
+    print_phase_analysis(sessions);
     print_hypotheses(engagement, predictors, sparks, task_types);
 }
 
@@ -342,6 +344,69 @@ fn print_spark_patterns(sparks: &SparkPatterns) {
         let short = p.replace("claude_code_experiments--", "");
         println!("  {short}: {count}");
     }
+    println!();
+}
+
+fn print_phase_analysis(sessions: &[Session]) {
+    let with_phases: Vec<_> = sessions.iter().filter(|s| !s.phases.is_empty()).collect();
+    if with_phases.is_empty() {
+        return;
+    }
+
+    println!("## Intra-Session Phases");
+    println!();
+    println!(
+        "- **Sessions with phase markers:** {} of {} ({:.0}%)",
+        with_phases.len(),
+        sessions.len(),
+        100.0 * with_phases.len() as f64 / sessions.len() as f64
+    );
+
+    // Sessions with engagement variation across phases
+    let mut variable_sessions = 0;
+    let mut total_phases = 0;
+    let mut phase_task_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+
+    for s in &with_phases {
+        total_phases += s.phases.len();
+
+        let engagements: Vec<f64> = s.phases.iter().filter_map(|p| p.engagement).collect();
+        if engagements.len() >= 2 {
+            let min = engagements.iter().cloned().fold(f64::INFINITY, f64::min);
+            let max = engagements
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max);
+            if (max - min).abs() > 0.5 {
+                variable_sessions += 1;
+            }
+        }
+
+        for phase in &s.phases {
+            for tt in &phase.task_types {
+                *phase_task_counts.entry(tt.clone()).or_default() += 1;
+            }
+        }
+    }
+
+    println!("- **Total phases:** {total_phases}");
+    println!("- **Sessions with engagement variation across phases:** {variable_sessions}");
+
+    if !phase_task_counts.is_empty() {
+        let mut sorted: Vec<_> = phase_task_counts.into_iter().collect();
+        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+
+        println!();
+        println!("### Phase Task Types");
+        println!();
+        println!("| Task Type | Phases |");
+        println!("|-----------|--------|");
+        for (tt, count) in sorted.iter().take(10) {
+            println!("| {tt} | {count} |");
+        }
+    }
+
     println!();
 }
 
