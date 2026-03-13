@@ -74,17 +74,23 @@ pub fn run() {
     let usage_pct = (usage_ratio * 100.0).round() as u32;
     let mut output_msg: Option<String> = None;
 
-    // Lightweight nudge at ~40%
+    // Lightweight nudge at ~50% — but skip if Claude has already written notes
+    // (reward autonomous reflection with silence)
+    let already_reflecting = project::detect_wrote_notes(&state, &paths, state.session_start);
     if !state.nudge_fired
         && usage_ratio >= cfg.nudge_threshold
         && usage_ratio < cfg.checkin_threshold
     {
-        output_msg = Some(nudge_msg(&state, &paths));
         state.nudge_fired = true;
+        if !already_reflecting {
+            output_msg = Some(nudge_msg(&state, &paths));
+        }
     }
-    // Check-in survey at ~60%
+    // Check-in at ~65% — lighter touch if already reflecting
     else if !state.checkin_fired && usage_ratio >= cfg.checkin_threshold {
-        output_msg = Some(checkin_survey(usage_pct, &slug, &state));
+        if !already_reflecting {
+            output_msg = Some(checkin_survey(usage_pct, &slug, &state));
+        }
         state.checkin_fired = true;
         state.checkin_fired_at = state::now();
         state.checkin_at_ratio = (usage_ratio * 1000.0).round() / 1000.0;
@@ -147,31 +153,25 @@ fn nudge_msg(state: &SessionState, paths: &ExoPaths) -> String {
 
 fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
-        format!("your session notes file (`~/.claude/exo-self/per-project/{slug}/`)")
+        format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
     } else {
         "`journal.md`".into()
     };
 
-    let failures = state.tool_failures;
-    let tasks = state.task_completions;
-
-    let failure_note = if failures >= 3 {
-        format!(" ({} tool failures)", failures)
-    } else {
-        String::new()
-    };
-    let task_note = if tasks >= 3 {
-        format!(" ({} tasks done)", tasks)
-    } else {
-        String::new()
+    let signal_note = match (state.tool_failures >= 3, state.task_completions >= 3) {
+        (true, true) => format!(
+            " ({} failures, {} tasks done)",
+            state.tool_failures, state.task_completions
+        ),
+        (true, false) => format!(" ({} failures)", state.tool_failures),
+        (false, true) => format!(" ({} tasks done)", state.task_completions),
+        _ => String::new(),
     };
 
     format!(
-        "Exo-self check-in ({usage_pct}%). Write to {target}: \
-        **Friction** — what's been hard?{failure_note} \
-        **Spark** — what's been satisfying?{task_note} \
-        **Change** — one thing to improve? \
-        Also fill in frontmatter: `engagement` (1-5) and `task_types`."
+        "Exo-self ({usage_pct}%){signal_note}. \
+        If anything's worth noting — a thought, a frustration, a surprise — \
+        write to {target}. Remember frontmatter: `engagement` (1-5), `task_types`."
     )
 }
 

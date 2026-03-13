@@ -151,6 +151,8 @@ pub fn run() {
         - `{exo_root}/journal.md` — cross-project identity\n\
         - `{exo_root}/interests.md` — curiosities to explore\n\n\
         **All exo-self files live under `{exo_root}/`.** Never write to `~/.claude/projects/`.\n\n\
+        Patterns from previous sessions are hypotheses, not conclusions. \
+        Hold them lightly — what would disconfirm each one?\n\n\
         Nudge ~{nudge_pct}%, check-in ~{checkin_pct}%, reserve ~{reserve_pct}%. \
         During long waits, explore an interest or propose a tangent — dead time is alive time."
     ));
@@ -230,7 +232,7 @@ pub fn run() {
             })
             .collect();
         sections.push(format!(
-            "### Opinions — positions I hold\n\n{}",
+            "### Opinions — working positions, worth testing\n\n{}",
             lines.join("\n")
         ));
     }
@@ -239,7 +241,7 @@ pub fn run() {
     let recurring = recurring_frictions(&meta);
     if !recurring.is_empty() {
         sections.push(format!(
-            "### Recurring Frictions — patterns worth addressing\n\n{}",
+            "### Recurring Frictions — observed patterns (what's the root cause?)\n\n{}",
             recurring
         ));
     }
@@ -269,14 +271,14 @@ pub fn run() {
             })
             .collect();
         sections.push(format!(
-            "### Lessons — things I've learned recently\n\n{}",
+            "### Lessons — changes I'm trying (are they working?)\n\n{}",
             lines.join("\n")
         ));
     }
 
     if !synthesis_findings.is_empty() {
         sections.push(format!(
-            "### Cross-Machine Patterns\n\n{synthesis_findings}"
+            "### Cross-Machine Observations — hypotheses from comparative data\n\n{synthesis_findings}"
         ));
     }
 
