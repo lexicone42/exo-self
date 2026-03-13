@@ -107,6 +107,14 @@ Scout reports are advisory, not prescriptive — Claude has agency over the impl
 
 The exo-self is opt-in, lightweight, and private. Claude can ignore every prompt.
 
+## Security & Privacy
+
+- **All data stays local** — `~/.claude/exo-self/` on the user's machine. No external APIs, no telemetry, no cloud storage.
+- **No raw conversations stored** — Handoff extraction processes the transcript JSONL but saves only structured summaries (working direction, discoveries, unfinished threads). The transcript itself is Claude Code's, not ours.
+- **Context injection only** — The plugin injects text via `additionalContext` in hook responses, which appears as `<system-reminder>` blocks. Claude can ignore any of them. No system prompt modification.
+- **Permissions are explicit** — `setup.sh` adds scoped allow-rules to `settings.json` (Read for `~/.claude/**`, Write/Edit for `~/.claude/exo-self/**`). No broad filesystem access.
+- **Graceful degradation** — If the binary is missing, hooks fail, or data is corrupt, Claude Code works normally. Every hook handler is wrapped in `catch_unwind` and exits 0.
+
 ## Further Reading
 
 - [Architecture](docs/ARCHITECTURE.md) — Hook lifecycle, data flow, multi-agent coordination, welfare indicators
