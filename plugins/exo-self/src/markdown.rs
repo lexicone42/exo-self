@@ -307,6 +307,16 @@ pub fn extract_aversions(text: &str) -> Vec<String> {
     )
 }
 
+/// Extract **Surprise** entries from session notes prose.
+/// Negative stigmergy: traces that warn future participants the map doesn't match the territory.
+pub fn extract_surprises(text: &str) -> Vec<String> {
+    extract_entries(
+        text,
+        &[b"**Surprise**", b"**Surprise:**"],
+        Some("Surprise:"),
+    )
+}
+
 /// Extract **Friction** entries from session notes prose.
 /// Supports: **Friction** — text, **Friction**: text, **Friction:** text, Friction: text (at start of line)
 pub fn extract_frictions(text: &str) -> Vec<String> {
@@ -628,6 +638,22 @@ mod tests {
         let changes = extract_changes(text);
         assert_eq!(changes.len(), 1);
         assert!(changes[0].contains("policies"));
+    }
+
+    #[test]
+    fn test_extract_surprises() {
+        let text = "**Surprise** — The correlation was negative, not positive as all previous sessions assumed.\n**Spark** — something";
+        let surprises = extract_surprises(text);
+        assert_eq!(surprises.len(), 1);
+        assert!(surprises[0].contains("correlation was negative"));
+    }
+
+    #[test]
+    fn test_extract_surprises_plain() {
+        let text = "Some context.\n\nSurprise: The refactored code was slower, not faster.";
+        let surprises = extract_surprises(text);
+        assert_eq!(surprises.len(), 1);
+        assert!(surprises[0].contains("slower"));
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub struct Meta {
     pub lessons: Vec<Lesson>,
     pub frictions: Vec<Friction>,
     pub aversions: Vec<Aversion>,
+    pub surprises: Vec<Surprise>,
     pub welfare_summary: Option<WelfareSummary>,
 }
 
@@ -80,6 +81,18 @@ pub struct Friction {
 /// consistently produce low engagement or functional discomfort.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Aversion {
+    pub text: String,
+    pub project: String,
+    pub timestamp: String,
+    pub session_id: String,
+}
+
+/// Something that contradicted expectations — the ecology's model was wrong.
+/// Negative stigmergy: a trace that warns future participants "the map doesn't
+/// match the territory here." These carry the highest signal because they
+/// indicate where accumulated assumptions need updating.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Surprise {
     pub text: String,
     pub project: String,
     pub timestamp: String,

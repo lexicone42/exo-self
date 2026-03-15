@@ -316,6 +316,46 @@ pub fn run() {
         }
     }
 
+    // Extract **Surprise** items from prose → store as negative stigmergy
+    let surprises_found = if !prose_content.is_empty() {
+        markdown::extract_surprises(&prose_content)
+    } else {
+        Vec::new()
+    };
+
+    if !surprises_found.is_empty() {
+        let project_slug = &state.project_slug;
+        let sid = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+
+        for surprise_text in &surprises_found {
+            let dedup_end = markdown::safe_truncate(surprise_text, 100);
+            let dedup_key = surprise_text[..dedup_end].to_lowercase();
+            let is_dup = meta.surprises.iter().any(|s| {
+                let s_end = markdown::safe_truncate(&s.text, 100);
+                s.text[..s_end].to_lowercase() == dedup_key
+            });
+            if !is_dup {
+                meta.surprises.push(Surprise {
+                    text: surprise_text.clone(),
+                    project: project_slug.clone(),
+                    timestamp: chrono::Local::now()
+                        .format("%Y-%m-%dT%H:%M:%S%.6f")
+                        .to_string(),
+                    session_id: sid.to_string(),
+                });
+            }
+        }
+        // Cap at 15 (surprises are high-signal — keep fewer but value more)
+        let len = meta.surprises.len();
+        if len > 15 {
+            meta.surprises = meta.surprises.split_off(len - 15);
+        }
+    }
+
     // Extract **Aversion** items from prose → store as structured aversions
     let aversions_found = if !prose_content.is_empty() {
         markdown::extract_aversions(&prose_content)

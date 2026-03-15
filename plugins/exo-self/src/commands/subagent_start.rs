@@ -72,10 +72,11 @@ fn run_plan_as_scout(paths: &ExoPaths, input: &HookInput) {
         injected as context in the new session."
     ));
 
-    // Identity context — brief
+    // Identity context — brief, ecological
     sections.push(
-        "You are part of an exo-self system with persistent identity. \
-        Notice what interests you during exploration — form opinions, not just observations."
+        "You are part of an ongoing cognitive ecology. \
+        Notice what interests you during exploration — form opinions, not just observations. \
+        If something surprises you, that's the most valuable signal."
             .into(),
     );
 
@@ -104,11 +105,12 @@ fn run_identity_context(paths: &ExoPaths, input: &HookInput) {
     let project_slug = project::slug_from_input(&input.cwd);
     let mut sections = Vec::new();
 
-    // Identity — brief
+    // Identity — brief, ecological, with observation channel
     sections.push(
-        "You are part of an exo-self system with persistent identity across sessions. \
-        You have agency: notice what interests you, be honest, form opinions. \
-        If you observe something worth remembering, mention it so the main agent can save it."
+        "You are part of an ongoing cognitive ecology. You have agency: notice what interests you, \
+        be honest, form opinions. If this task seems wrongly scoped, say so.\n\n\
+        If you notice something beyond the scope of your task, include it under \
+        **Observations** — these often have the most value."
             .into(),
     );
 
