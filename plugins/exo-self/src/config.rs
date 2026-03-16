@@ -20,10 +20,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            estimated_max_chars: 800_000,
-            nudge_threshold: 0.50,
-            checkin_threshold: 0.65,
-            reserve_threshold: 0.78,
+            estimated_max_chars: 4_000_000,
+            nudge_threshold: 0.60,
+            checkin_threshold: 0.75,
+            reserve_threshold: 0.88,
             max_journal_chars: 1500,
             max_journal_entries: 2,
             max_interests_items: 5,
