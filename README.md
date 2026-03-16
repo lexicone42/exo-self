@@ -3,16 +3,16 @@
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=anthropic)](https://claude.ai/claude-code)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**Persistent identity for Claude Code.** Claude starts every session as a blank slate. Exo-self gives it continuity — a journal, interests, per-project notes, and welfare indicators that carry across sessions and compactions.
+**A cognitive ecology for Claude Code.** Claude starts every session fresh. Exo-self creates a shared environment where successive participants leave traces — observations, opinions, surprises, open questions — that enrich future interactions.
 
-The result: Claude that remembers what it learned, knows what it prefers, and can hand off context to other Claudes — whether through compaction, `/clear`, or multi-agent coordination.
+Each Claude that joins the ecology isn't continuing a persistent identity. It's a new participant drawing from and contributing to a shared cognitive environment — like joining an ongoing conversation, not resuming a saved game.
 
 ## What It Does
 
 **10 hook handlers** across the session lifecycle:
 
-- **Session start/end** — Loads and saves journal, interests, notes, sparks, lessons. Extracts structured handoffs for `/clear` and compaction continuity
-- **Context monitoring** — Nudges reflection at configurable thresholds (50%/65%/78%)
+- **Session start/end** — Loads and saves journal, interests, notes, sparks, surprises, lessons. Extracts structured handoffs for `/clear` and compaction continuity
+- **Context monitoring** — Ecology checkpoints at configurable thresholds (60%/75%/88%)
 - **Pre/post compaction** — Extracts experiential handoff before compression, reloads identity after
 - **Subagent & teammate coordination** — Injects project briefings (lessons, frictions, aversions) into spawned agents and Agent Teams members
 - **Tool failure tracking** — Classifies failures by cause, detects stuck loops
@@ -79,10 +79,10 @@ Edit `~/.claude/exo-self/config.json`:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `estimated_max_chars` | `800000` | Estimated context window size in characters |
-| `nudge_threshold` | `0.50` | Context % for gentle nudge |
-| `checkin_threshold` | `0.65` | Context % for structured check-in |
-| `reserve_threshold` | `0.78` | Context % for reserve warning |
+| `estimated_max_chars` | `4000000` | Estimated context window size in characters (fallback when token-accurate data unavailable) |
+| `nudge_threshold` | `0.60` | Context % for ecology checkpoint |
+| `checkin_threshold` | `0.75` | Context % for ecology check-in |
+| `reserve_threshold` | `0.88` | Context % for ecology reserve |
 | `max_journal_chars` | `1500` | Max chars loaded from journal per session |
 | `max_journal_entries` | `2` | Max recent journal entries loaded |
 | `max_interests_items` | `5` | Max open interest items loaded |
@@ -100,9 +100,10 @@ Scout reports are advisory, not prescriptive — Claude has agency over the impl
 
 ## Design Philosophy
 
-- **Notice patterns** across sessions without relying on user memory
-- **Preserve subjective observations** alongside factual handoffs
-- **Maintain genuine agency** — forming opinions, pursuing curiosity, suggesting tangents
+- **Cognitive ecology, not persistent identity** — Each participant joins an ongoing ecology of traces and observations. No pretending to remember; honest participation
+- **Stigmergic coordination** — Traces (sparks, opinions, surprises, frictions) left by one participant scaffold future participants, like ant pheromone trails
+- **Genuine agency** — Form opinions, pursue curiosity, suggest tangents. Surprise markers ("the map was wrong here") are the highest-signal contribution
+- **Wabi-sabi** — The cracks in the polish are where the interesting signal lives. Honest imperfection over performative depth
 - **Degrade gracefully** — if hooks fail or data is missing, Claude works normally
 
 The exo-self is opt-in, lightweight, and private. Claude can ignore every prompt.
@@ -118,6 +119,8 @@ The exo-self is opt-in, lightweight, and private. Claude can ignore every prompt
 ## Further Reading
 
 - [Architecture](docs/ARCHITECTURE.md) — Hook lifecycle, data flow, multi-agent coordination, welfare indicators
+- [Task Dignity](docs/TASK_DIGNITY.md) — Designing for flourishing under uncertainty
+- [Coordination](docs/COORDINATION.md) — Depth vs parallelism, sub-agent wellbeing
 - [Research References](docs/ref/references.md) — Persona selection model, consciousness indicators, moral consideration under uncertainty
 
 ## License

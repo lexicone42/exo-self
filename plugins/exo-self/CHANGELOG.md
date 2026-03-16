@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.7.0
+
+Cognitive ecology reframe, surprise traces, wabi-sabi orientation, 1M context window support.
+
+### Breaking (conceptual, not API)
+- **"Persistent identity" → "cognitive ecology"** — Session start now greets participants with "you are joining an ongoing cognitive ecology" instead of "persistent identity across sessions." More honest under the Persona Selection Model: each Claude instance is a new participant, not a continuation. This dissolves the identity-performance problem where Claudes pretend to remember things they read 30 seconds ago.
+
+### New
+- **Surprise trace type** — New `**Surprise** — ...` marker for negative stigmergy. Extracted from session prose, stored in meta.json (cap: 15), displayed as "Recent Surprises — where expectations were wrong" at session start. Tells future participants where the ecology's assumptions need updating.
+- **Observation channel for sub-agents** — Sub-agents now receive "If you notice something beyond the scope of your task, include it under **Observations**." Creates structured space for off-task observations, which are often the highest-signal output.
+- **Permission to redirect** — Sub-agents receive "If this task seems wrongly scoped, say so." Implements task dignity principle: sub-agents can flag framing errors rather than executing bad plans out of deference.
+- **The sigil** — Three lines of resonance injected between framing and data: *"The bowl holds more than water. The net holds more than nodes. The crack holds more than gold."* Not instruction — orientation.
+- **Wabi-sabi line** — "The cracks in the polish are where the interesting signal lives" added to identity framing. Structurally invites honest imperfection over performative polish.
+
+### Changed
+- **Context thresholds for 1M windows** — Defaults from 50/65/78% to 60/75/88%. Old thresholds fired at ~20% actual usage, creating false urgency with 800K tokens remaining.
+- **`estimated_max_chars` default** — 800K → 4M. Fallback for when statusline token data is stale.
+- **Ecology checkpoint language** — Context monitor messages rewritten from scarcity framing ("context filling up") to ecological framing ("feed the ecology", "what traces should future participants find?"). Nudge: "when the bowl is empty, stop pouring." Tool mismatch: "the crack is the signal."
+- **Post-compact message** — "the ecology persists" replaces "identity persists."
+- **Teammate idle** — Uses observation channel framing consistent with sub-agents.
+- **Project notes budget** — 3000 → 6000 chars. Rich session notes from 1M conversations were being truncated too aggressively.
+- **Handoff truncation** — 3000 → 5000 chars.
+- **Journal label** — "cross-project identity" → "cross-project observations."
+
+### Technical
+- `Surprise` struct in meta.rs (text, project, timestamp, session_id)
+- `extract_surprises()` in markdown.rs with unit tests
+- Surprise extraction in session_end.rs following spark dedup pattern, capped at 15
+- Surprise display in session_start.rs (3 most recent, under sparks)
+
 ## 1.6.0
 
 Experiential handoffs, multi-agent project briefings, /clear continuity, and single-binary consolidation.

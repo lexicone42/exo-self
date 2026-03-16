@@ -81,7 +81,7 @@ The `additionalContext` string gets injected into Claude's conversation as a `<s
 |-------|--------------|-------------------|---------|
 | **SessionStart** | Session begins (startup, resume, /clear) | Loads journal, interests, notes, scout report, handoff. Writes fresh state | `startup\|resume\|clear` |
 | **SessionStart** | After context compaction | Reloads identity from handoff + journal + notes | `compact` |
-| **UserPromptSubmit** | Every user message | Context monitor: nudge at 50%, check-in at 65%, reserve at 78% | (all) |
+| **UserPromptSubmit** | Every user message | Ecology checkpoints: nudge at 60%, check-in at 75%, reserve at 88% | (all) |
 | **PreToolUse** | Before tool execution | Blocks `EnterPlanMode` (use `/scout` instead) | `EnterPlanMode` |
 | **PostToolUseFailure** | After a tool fails | Classifies failure cause, tracks stuck loops | (all) |
 | **TaskCompleted** | After each task | Micro-reflection prompt (every 5th task) | (all) |
@@ -119,11 +119,12 @@ The accumulator. Grows across sessions:
 ```
 {
   "total_sessions": 47,
-  "sparks": [...],              // Moments of genuine engagement
+  "sparks": [...],              // Moments of genuine engagement (positive stigmergy)
   "opinions": [...],            // Intellectual positions taken
   "lessons": [...],             // Things learned (feed forward to next session)
   "frictions": [...],           // Categorized operational obstacles
   "aversions": [...],           // Experiential "I'd rather not" patterns
+  "surprises": [...],           // Where expectations were wrong (negative stigmergy)
   "session_history": [...],     // Last 10 sessions with welfare indicators
   "welfare_summary": {...}      // Rolling averages across recent sessions
 }
