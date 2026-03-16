@@ -74,7 +74,7 @@ pub fn run() {
 
     // Read project notes
     let project_notes = if !project_slug.is_empty() {
-        project::load_recent_notes(&paths, &project_slug, 3000)
+        project::load_recent_notes(&paths, &project_slug, 6000)
     } else {
         String::new()
     };

@@ -31,7 +31,7 @@ pub fn run() {
 
     // Load project notes
     let project_notes = if !project_slug.is_empty() {
-        project::load_recent_notes(&paths, &project_slug, 3000)
+        project::load_recent_notes(&paths, &project_slug, 6000)
     } else {
         String::new()
     };
@@ -61,14 +61,15 @@ pub fn run() {
 
     sections.push(format!(
         "## Exo-Self: Post-Compaction Reload (#{compactions})\n\n\
-        Context compacted — history gone, identity persists. {state_msg}\n\
-        Full agency: write to `~/.claude/exo-self/` (journal, per-project notes) anytime."
+        Context compacted — conversation history compressed, but the ecology persists. {state_msg}\n\
+        The traces below are what previous participants (including your earlier self in this session) \
+        left for you. Contribute your own to `~/.claude/exo-self/`."
     ));
 
     if auto_memory_exists {
         sections.push(
-            "MEMORY.md = factual context. Exo-self below = experiential (what was working, \
-            what was frustrating). Use both to rebuild continuity."
+            "MEMORY.md = factual context. Exo-self below = experiential (how work feels, \
+            what surprised you, what's interesting). Use both to rebuild continuity."
                 .into(),
         );
     }
@@ -104,9 +105,9 @@ fn load_handoff(paths: &ExoPaths, session_id: &str) -> String {
         if let Ok(content) = std::fs::read_to_string(&path) {
             let trimmed = content.trim();
             if !trimmed.is_empty() {
-                return if trimmed.len() > 3000 {
+                return if trimmed.len() > 5000 {
                     {
-                        let end = crate::markdown::safe_truncate(trimmed, 3000);
+                        let end = crate::markdown::safe_truncate(trimmed, 5000);
                         format!("{}...", &trimmed[..end])
                     }
                 } else {
@@ -120,9 +121,9 @@ fn load_handoff(paths: &ExoPaths, session_id: &str) -> String {
     let latest = paths.handoffs_dir.join("latest.md");
     if let Ok(content) = std::fs::read_to_string(&latest) {
         let trimmed = content.trim();
-        if trimmed.len() > 3000 {
+        if trimmed.len() > 5000 {
             {
-                let end = crate::markdown::safe_truncate(trimmed, 3000);
+                let end = crate::markdown::safe_truncate(trimmed, 5000);
                 format!("{}...", &trimmed[..end])
             }
         } else {

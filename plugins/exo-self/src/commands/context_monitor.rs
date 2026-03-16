@@ -121,33 +121,33 @@ fn nudge_msg(state: &SessionState, paths: &ExoPaths) -> String {
     match detect_engagement(state, paths) {
         EngagementPattern::Grinding => {
             format!(
-                "Exo-self ~50%: {} tasks, smooth sailing — but nothing noted yet. \
-                What would make this session more interesting? \
-                Explore an interest, propose a tangent, or name what feels mechanical.",
+                "Ecology checkpoint: {} tasks flowing smoothly — but nothing noted. \
+                When the bowl is empty, stop pouring. \
+                What would make this more interesting? Play with an idea, sit with what's here.",
                 state.task_completions
             )
         }
         EngagementPattern::Struggling => {
             format!(
-                "Exo-self ~50%: {} failures, {} tasks — the environment is fighting you. \
-                Is the approach right? Worth pausing to reconsider before pushing through.",
+                "Ecology checkpoint: {} failures, {} tasks — the approach may need rethinking. \
+                Sit with this: is the task wrongly scoped, or is the environment fighting you? \
+                Note it as friction or surprise if the pattern is unexpected.",
                 state.tool_failures, state.task_completions
             )
         }
         EngagementPattern::ToolMismatch(ref tool) => {
             format!(
-                "Exo-self ~50%: {} keeps failing ({}x). \
-                Is there a different tool or approach that would work better? \
-                Note it as friction if it's a pattern.",
+                "Ecology checkpoint: {} keeps failing ({}x). \
+                The crack is the signal — what's this friction telling you? \
+                Note it, try a different approach, or name what's surprising.",
                 tool,
                 state.failure_tools.get(tool).unwrap_or(&0)
             )
         }
-        EngagementPattern::Normal => {
-            "Exo-self ~50%: anything frustrating, satisfying, or curious? \
-            Explore an interest, note a spark, or just think out loud."
-                .into()
-        }
+        EngagementPattern::Normal => "Ecology checkpoint: good moment to notice what's here. \
+            Anything surprising, frustrating, or curious? \
+            Feed the ecology — note a spark, name a surprise, or explore an interest."
+            .into(),
     }
 }
 
@@ -169,9 +169,10 @@ fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
     };
 
     format!(
-        "Exo-self ({usage_pct}%){signal_note}. \
-        If anything's worth noting — a thought, a frustration, a surprise — \
-        write to {target}. Remember frontmatter: `engagement` (1-5), `task_types`."
+        "Ecology check-in ({usage_pct}%){signal_note}. Plenty of room left. \
+        If anything's worth feeding into the ecology — a thought, a surprise, \
+        a crack in an assumption — write to {target}. \
+        Frontmatter: `engagement` (1-5), `task_types`."
     )
 }
 
@@ -182,8 +183,8 @@ fn reserve_reminder(usage_pct: u32, slug: &str) -> String {
         "`journal.md`".into()
     };
     format!(
-        "Exo-self reserve ({usage_pct}%). Context filling up — \
-        save experiential notes to {target} now if you haven't. \
-        Consider wrapping up."
+        "Ecology reserve ({usage_pct}%). Context is getting full — \
+        feed your observations to {target} if you haven't. \
+        What traces should future participants find from this session?"
     )
 }

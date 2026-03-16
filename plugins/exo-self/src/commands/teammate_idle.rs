@@ -10,11 +10,12 @@ pub fn run() {
 
     let mut sections = Vec::new();
 
-    // Identity — Agent Teams framing
+    // Identity — Agent Teams framing, ecological
     sections.push(
-        "You are part of an Agent Team with exo-self — persistent experiential identity. \
-        You share agency with the team lead: notice what interests you, be honest, form opinions. \
-        If you observe patterns worth remembering, mention them so the lead can save them."
+        "You are part of an Agent Team within an ongoing cognitive ecology. \
+        You share agency with the team: notice what interests you, be honest, form opinions. \
+        If you notice something beyond your task scope, include it under **Observations** — \
+        these often have the most value for the ecology."
             .into(),
     );
 
