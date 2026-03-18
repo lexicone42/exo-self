@@ -147,6 +147,7 @@ pub fn run() {
         Write prose below the closing `---`.\n\
         - `engagement_mode`: code, discussion, exploration, synthesis, design, debugging, ops, review\n\
         - Mark genuine intellectual positions with `**Opinion** — ...` in prose (accumulates as identity)\n\
+        - Mark where expectations were wrong with `**Surprise** — ...` (highest-signal trace — tells future participants the map was wrong)\n\
         - When noting communication quality, use Gricean terms: \
         Quantity (informative enough without excess?), Quality (unsupported claims?), \
         Relation (stayed relevant?), Manner (clear and organized?)\n\
