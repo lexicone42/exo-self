@@ -51,6 +51,17 @@ pub enum Command {
         /// The module under test (omit to scan all importers)
         module: Option<String>,
     },
+    /// Compress an intention into a sigil glyph
+    Sigil {
+        /// The intention text to compress (omit for --list)
+        intention: Option<String>,
+        /// List all stored sigils
+        #[arg(long)]
+        list: bool,
+        /// Charge an existing sigil file with a resonance phrase
+        #[arg(long, value_names = &["FILE", "PHRASE"], num_args = 2)]
+        charge: Option<Vec<String>>,
+    },
     /// Reflexive analysis of exo-self session data
     Reflect {
         /// Load session data + meta into redb, infer preferences
@@ -68,7 +79,10 @@ impl Command {
     pub fn is_tool(&self) -> bool {
         matches!(
             self,
-            Command::Patchpath { .. } | Command::Reflect { .. } | Command::Backfill
+            Command::Patchpath { .. }
+                | Command::Reflect { .. }
+                | Command::Backfill
+                | Command::Sigil { .. }
         )
     }
 }
@@ -147,6 +161,23 @@ pub fn dispatch(cmd: Command) -> u8 {
         }
         Command::Backfill => {
             commands::backfill::run();
+            0
+        }
+        Command::Sigil {
+            intention,
+            list,
+            charge,
+        } => {
+            if list {
+                commands::sigil::list();
+            } else if let Some(args) = charge {
+                commands::sigil::charge(&args[0], &args[1]);
+            } else if let Some(text) = intention {
+                commands::sigil::create(&text);
+            } else {
+                eprintln!("sigil: provide an intention, --list, or --charge <file> <phrase>");
+                return 1;
+            }
             0
         }
     }

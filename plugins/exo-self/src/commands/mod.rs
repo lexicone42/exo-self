@@ -9,6 +9,7 @@ pub mod pre_tool_use;
 pub mod reflect;
 pub mod session_end;
 pub mod session_start;
+pub mod sigil;
 pub mod statusline;
 pub mod stop_check;
 pub mod subagent_start;
