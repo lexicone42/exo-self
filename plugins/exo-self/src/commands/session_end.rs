@@ -4,6 +4,7 @@ use crate::meta::*;
 use crate::paths::ExoPaths;
 use crate::project;
 use crate::state::{self, SessionState};
+use crate::traces;
 use std::collections::HashMap;
 
 pub fn run() {
@@ -393,6 +394,43 @@ pub fn run() {
         let len = meta.aversions.len();
         if len > 20 {
             meta.aversions = meta.aversions.split_off(len - 20);
+        }
+    }
+
+    // --- Write individual trace files (dual-write alongside meta.json) ---
+    // Each trace becomes its own file — no shared mutable state, unlimited parallel writers.
+    {
+        let project_slug = &state.project_slug;
+        let sid = if session_id.is_empty() {
+            &state.session_id
+        } else {
+            session_id
+        };
+        for text in &sparks_found {
+            traces::write_trace(&paths.traces_dir, "spark", text, project_slug, sid, None);
+        }
+        for text in &opinions_found {
+            traces::write_trace(&paths.traces_dir, "opinion", text, project_slug, sid, None);
+        }
+        for text in &frictions_found {
+            let category = markdown::infer_friction_category(text);
+            traces::write_trace(
+                &paths.traces_dir,
+                "friction",
+                text,
+                project_slug,
+                sid,
+                Some(&category),
+            );
+        }
+        for text in &changes_found {
+            traces::write_trace(&paths.traces_dir, "lesson", text, project_slug, sid, None);
+        }
+        for text in &surprises_found {
+            traces::write_trace(&paths.traces_dir, "surprise", text, project_slug, sid, None);
+        }
+        for text in &aversions_found {
+            traces::write_trace(&paths.traces_dir, "aversion", text, project_slug, sid, None);
         }
     }
 

@@ -11,6 +11,7 @@ mod paths;
 mod project;
 mod scaling;
 mod state;
+mod traces;
 
 fn main() {
     let cmd = cli::parse();

@@ -14,6 +14,7 @@ pub struct ExoPaths {
     pub context_window: PathBuf,
     pub synthesis: PathBuf,
     pub sigils_dir: PathBuf,
+    pub traces_dir: PathBuf,
 }
 
 impl ExoPaths {
@@ -32,6 +33,7 @@ impl ExoPaths {
             context_window: root.join(".context-window.json"),
             synthesis: root.join("synthesis.md"),
             sigils_dir: root.join("sigils"),
+            traces_dir: root.join("traces"),
             root,
         }
     }
@@ -77,5 +79,6 @@ impl ExoPaths {
         let _ = std::fs::create_dir_all(&self.per_project_dir);
         let _ = std::fs::create_dir_all(self.root.join("reflections"));
         let _ = std::fs::create_dir_all(&self.sigils_dir);
+        let _ = std::fs::create_dir_all(&self.traces_dir);
     }
 }

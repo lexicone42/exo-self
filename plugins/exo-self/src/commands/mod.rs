@@ -1,4 +1,5 @@
 pub mod backfill;
+pub mod backfill_traces;
 pub mod context_monitor;
 pub mod extract_handoff;
 pub mod failure_tracker;

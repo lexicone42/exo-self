@@ -42,6 +42,8 @@ pub enum Command {
 
     /// Backfill lessons from existing session notes into meta.json
     Backfill,
+    /// Migrate existing meta.json traces to individual trace files
+    BackfillTraces,
 
     // ── Workshop tools (formerly separate binaries) ──────────────
     /// Resolve the correct mock.patch() target for a Python symbol
@@ -82,6 +84,7 @@ impl Command {
             Command::Patchpath { .. }
                 | Command::Reflect { .. }
                 | Command::Backfill
+                | Command::BackfillTraces
                 | Command::Sigil { .. }
         )
     }
@@ -161,6 +164,10 @@ pub fn dispatch(cmd: Command) -> u8 {
         }
         Command::Backfill => {
             commands::backfill::run();
+            0
+        }
+        Command::BackfillTraces => {
+            commands::backfill_traces::run();
             0
         }
         Command::Sigil {
