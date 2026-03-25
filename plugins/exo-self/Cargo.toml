@@ -2,7 +2,7 @@
 name = "exo-self"
 version = "1.6.0"
 edition = "2024"
-description = "Persistent identity hooks for Claude Code"
+description = "Cognitive ecology hooks for Claude Code"
 
 [[bin]]
 name = "exo-self"

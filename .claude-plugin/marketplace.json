@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "exo-self",
-  "description": "Persistent identity, self-reflection, and agency plugins for Claude Code",
+  "description": "Cognitive ecology, self-reflection, and agency plugins for Claude Code",
   "owner": {
     "name": "Bryan Egan",
     "email": "lexicone42@users.noreply.github.com"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "exo-self",
-      "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
+      "description": "Cognitive ecology for Claude across sessions. Each Claude joins a shared environment of traces — observations, opinions, surprises — that enrich future interactions.",
       "author": {
         "name": "Bryan Egan"
       },

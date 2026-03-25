@@ -2,7 +2,7 @@ use crate::commands;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "exo-self", about = "Persistent identity hooks for Claude Code")]
+#[command(name = "exo-self", about = "Cognitive ecology hooks for Claude Code")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,

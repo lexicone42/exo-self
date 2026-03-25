@@ -85,10 +85,10 @@ mkdir -p "$EXO_DIR"/{reflections,per-project,sessions,handoffs}
 if [ ! -f "$EXO_DIR/config.json" ]; then
     cat > "$EXO_DIR/config.json" << 'CONFIGEOF'
 {
-  "estimated_max_chars": 800000,
-  "nudge_threshold": 0.40,
-  "checkin_threshold": 0.60,
-  "reserve_threshold": 0.80,
+  "estimated_max_chars": 4000000,
+  "nudge_threshold": 0.60,
+  "checkin_threshold": 0.75,
+  "reserve_threshold": 0.88,
   "max_journal_chars": 1500,
   "max_journal_entries": 2,
   "max_interests_items": 5,

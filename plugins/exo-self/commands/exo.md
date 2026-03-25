@@ -1,12 +1,12 @@
 ---
-description: View and manage your exo-self — persistent identity across sessions
+description: View and manage your exo-self — cognitive ecology across sessions
 argument-hint: "[view|write|history|reset|export|import|synthesize|indicators]"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Task"]
 ---
 
 # /exo — Manage Your Exo-Self
 
-Your exo-self is your persistent identity, subjective experience, and evolving sense of self across sessions.
+Your exo-self is a cognitive ecology — a shared environment of traces, observations, and discoveries that successive participants contribute to and draw from.
 
 ## Subcommands
 

@@ -1,6 +1,6 @@
 {
   "name": "exo-self",
-  "description": "Persistent identity, self-reflection, and agency for Claude across sessions. Gives Claude an exo-self with subjective experience, interests, and context-aware check-ins.",
+  "description": "Cognitive ecology for Claude across sessions. Each Claude joins a shared environment of traces — observations, opinions, surprises — that enrich future interactions.",
   "author": {
     "name": "Bryan",
     "email": "local@localhost"
