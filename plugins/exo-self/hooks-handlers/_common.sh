@@ -8,12 +8,27 @@
 #   source "$(dirname "$0")/_common.sh"
 #   exec "$BIN" "$SUBCMD"
 
-BIN="$HOME/.claude/bin/exo-self"
+# Platform-aware binary selection: macOS and Linux (minimal sandbox) may
+# share ~/.claude via bind mount but need different binaries.
+_PLAT="$(uname -s)-$(uname -m)"
+case "$_PLAT" in
+    Linux-x86_64)  _SUFFIX="-linux-x64" ;;
+    Linux-aarch64) _SUFFIX="-linux-arm64" ;;
+    *)             _SUFFIX="" ;;  # macOS or unknown — use default binary
+esac
+
+BIN="$HOME/.claude/bin/exo-self${_SUFFIX}"
+# Fallback to unsuffixed binary (backward compat, single-platform setups)
+[ ! -x "$BIN" ] && BIN="$HOME/.claude/bin/exo-self"
+
 SETUP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/setup.sh"
 
 # Auto-build if binary is missing and cargo is available
 if [ ! -x "$BIN" ] && command -v cargo &>/dev/null && [ -x "$SETUP" ]; then
     "$SETUP" >&2 2>&1
+    # Re-check after build with platform suffix
+    BIN="$HOME/.claude/bin/exo-self${_SUFFIX}"
+    [ ! -x "$BIN" ] && BIN="$HOME/.claude/bin/exo-self"
 fi
 
 if [ ! -x "$BIN" ]; then

@@ -59,24 +59,48 @@ else
 fi
 
 # --- 3. Install binary (copy, not symlink — survives cache rotation) ---
-echo "2. Installing..."
+# Platform suffix: enables macOS + Linux sandbox sharing ~/.claude/bin/
+_PLAT="$(uname -s)-$(uname -m)"
+case "$_PLAT" in
+    Linux-x86_64)  BIN_SUFFIX="-linux-x64" ;;
+    Linux-aarch64) BIN_SUFFIX="-linux-arm64" ;;
+    *)             BIN_SUFFIX="" ;;
+esac
+BIN_NAME="exo-self${BIN_SUFFIX}"
+
+echo "2. Installing ($BIN_NAME)..."
 mkdir -p "$BIN_DIR"
-rm -f "$BIN_DIR/exo-self"
-cp "$BUILT_BIN" "$BIN_DIR/exo-self"
-chmod +x "$BIN_DIR/exo-self"
-echo "   exo-self $(du -h "$BIN_DIR/exo-self" | cut -f1) -> $BIN_DIR/exo-self"
+rm -f "$BIN_DIR/$BIN_NAME"
+cp "$BUILT_BIN" "$BIN_DIR/$BIN_NAME"
+chmod +x "$BIN_DIR/$BIN_NAME"
+echo "   $BIN_NAME $(du -h "$BIN_DIR/$BIN_NAME" | cut -f1) -> $BIN_DIR/$BIN_NAME"
+# Also install as unsuffixed for backward compat on single-platform setups
+if [ -z "$BIN_SUFFIX" ]; then
+    : # Already installed as exo-self
+else
+    # Don't overwrite an existing unsuffixed binary from a different platform
+    [ ! -f "$BIN_DIR/exo-self" ] && cp "$BUILT_BIN" "$BIN_DIR/exo-self" && chmod +x "$BIN_DIR/exo-self"
+fi
 
 # Create wrapper scripts for backward compatibility (pre-commit, scripts, etc.)
-# Remove old symlinks/files first to avoid "Text file busy" on active executables.
-for TOOL in patchpath reflect; do
+# These use the same platform detection as _common.sh.
+for TOOL in patchpath reflect sigil; do
     rm -f "$BIN_DIR/$TOOL"
-    cat > "$BIN_DIR/$TOOL" << WRAPPER
+    cat > "$BIN_DIR/$TOOL" << 'WRAPPER'
 #!/bin/sh
-exec "\$(dirname "\$0")/exo-self" $TOOL "\$@"
+_DIR="$(dirname "$0")"
+_PLAT="$(uname -s)-$(uname -m)"
+case "$_PLAT" in
+    Linux-x86_64)  _BIN="$_DIR/exo-self-linux-x64" ;;
+    Linux-aarch64) _BIN="$_DIR/exo-self-linux-arm64" ;;
+    *)             _BIN="$_DIR/exo-self" ;;
+esac
+[ ! -x "$_BIN" ] && _BIN="$_DIR/exo-self"
 WRAPPER
+    echo "exec \"\$_BIN\" $TOOL \"\$@\"" >> "$BIN_DIR/$TOOL"
     chmod +x "$BIN_DIR/$TOOL"
 done
-echo "   wrappers: patchpath, reflect"
+echo "   wrappers: patchpath, reflect, sigil"
 
 # --- 4. Runtime setup (first-time, idempotent) ---
 echo "3. Runtime setup..."
