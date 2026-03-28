@@ -366,8 +366,14 @@ pub fn infer_friction_category(text: &str) -> String {
         "permissions".into()
     } else if lower.contains("compil") || lower.contains("build") && lower.contains("fail") {
         "build_failure".into()
+    } else if lower.contains("lock") || lower.contains("contention") || lower.contains("busy") {
+        "lock_contention".into()
+    } else if lower.contains("network") || lower.contains("timeout") || lower.contains("connect") {
+        "network".into()
+    } else if lower.contains("syntax") || lower.contains("parse error") {
+        "syntax_error".into()
     } else {
-        "general".into()
+        "unclassified".into()
     }
 }
 
@@ -752,7 +758,7 @@ mod tests {
         );
         assert_eq!(
             infer_friction_category("Something else entirely"),
-            "general"
+            "unclassified"
         );
         assert_eq!(
             infer_friction_category("Schema migration broke everything"),

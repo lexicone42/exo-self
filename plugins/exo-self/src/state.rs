@@ -50,6 +50,9 @@ pub struct SessionState {
 
     // Scout tracking
     pub scouted: bool,
+
+    // Time-based nudges (for 1M context windows where percentage thresholds rarely fire)
+    pub time_nudge_count: u32,
 }
 
 impl Default for SessionState {
@@ -84,6 +87,7 @@ impl Default for SessionState {
             stop_reminded: false,
             last_stop_time: 0.0,
             scouted: false,
+            time_nudge_count: 0,
         }
     }
 }

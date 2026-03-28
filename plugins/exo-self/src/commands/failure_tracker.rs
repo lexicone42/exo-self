@@ -179,5 +179,43 @@ fn classify_failure(input: &HookInput) -> String {
         return "file_not_found".into();
     }
 
-    "general".into()
+    // Network / API errors
+    if error_lower.contains("connection refused")
+        || error_lower.contains("timeout")
+        || error_lower.contains("timed out")
+        || error_lower.contains("dns")
+        || error_lower.contains("could not resolve")
+        || error_lower.contains("ssl")
+        || error_lower.contains("certificate")
+    {
+        return "network".into();
+    }
+
+    // Cargo / Rust specific (not caught by build_failure above)
+    if error_lower.contains("cargo")
+        || error_lower.contains("rustc")
+        || error_lower.contains("unresolved")
+        || error_lower.contains("e0") && error_lower.len() > 4
+    {
+        return "build_failure".into();
+    }
+
+    // Lock contention / resource busy
+    if error_lower.contains("lock")
+        || error_lower.contains("text file busy")
+        || error_lower.contains("resource busy")
+        || error_lower.contains("blocking")
+    {
+        return "lock_contention".into();
+    }
+
+    // Syntax / parse errors
+    if error_lower.contains("syntax error")
+        || error_lower.contains("parse error")
+        || error_lower.contains("unexpected token")
+    {
+        return "syntax_error".into();
+    }
+
+    "unclassified".into()
 }

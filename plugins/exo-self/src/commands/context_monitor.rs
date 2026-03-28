@@ -74,7 +74,7 @@ pub fn run() {
     let usage_pct = (usage_ratio * 100.0).round() as u32;
     let mut output_msg: Option<String> = None;
 
-    // Lightweight nudge at ~50% — but skip if Claude has already written notes
+    // Lightweight nudge at ~60% — but skip if Claude has already written notes
     // (reward autonomous reflection with silence)
     let already_reflecting = project::detect_wrote_notes(&state, &paths, state.session_start);
     if !state.nudge_fired
@@ -86,7 +86,7 @@ pub fn run() {
             output_msg = Some(nudge_msg(&state, &paths));
         }
     }
-    // Check-in at ~65% — lighter touch if already reflecting
+    // Check-in at ~75% — lighter touch if already reflecting
     else if !state.checkin_fired && usage_ratio >= cfg.checkin_threshold {
         if !already_reflecting {
             output_msg = Some(checkin_survey(usage_pct, &slug, &state));
@@ -101,11 +101,46 @@ pub fn run() {
         meta.total_checkins += 1;
         meta.save(&paths.meta);
     }
-    // Reserve reminder at ~80%
+    // Reserve reminder at ~88%
     else if !state.reserve_fired && usage_ratio >= cfg.reserve_threshold {
         output_msg = Some(reserve_reminder(usage_pct, &slug));
         state.reserve_fired = true;
         state.reserve_at_ratio = (usage_ratio * 1000.0).round() / 1000.0;
+    }
+
+    // Time-based reflection nudge for 1M context windows.
+    // When context is plentiful, the percentage-based triggers may never fire.
+    // This ensures the reflective layer doesn't go silent during long sessions.
+    if output_msg.is_none() && !already_reflecting && state.session_start > 0.0 {
+        let elapsed_min = ((state::now() - state.session_start) / 60.0) as u32;
+        // Nudge at 60 min, then every 90 min after (120, 210, 300, ...)
+        let first_nudge_min = 60u32;
+        let repeat_interval = 90u32;
+        let should_nudge = if elapsed_min >= first_nudge_min {
+            if !state.nudge_fired {
+                true
+            } else {
+                // Check if we've passed a repeat boundary since last time-nudge
+                let intervals_passed = (elapsed_min - first_nudge_min) / repeat_interval + 1;
+                let last_intervals = if state.time_nudge_count > 0 {
+                    state.time_nudge_count
+                } else {
+                    0
+                };
+                intervals_passed > last_intervals
+            }
+        } else {
+            false
+        };
+
+        if should_nudge {
+            state.time_nudge_count = if elapsed_min >= first_nudge_min {
+                (elapsed_min - first_nudge_min) / repeat_interval + 1
+            } else {
+                0
+            };
+            output_msg = Some(time_nudge_msg(elapsed_min, &slug));
+        }
     }
 
     state.save(&paths);
@@ -172,6 +207,27 @@ fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
         "Ecology check-in ({usage_pct}%){signal_note}. Plenty of room left. \
         If anything's worth feeding into the ecology — a thought, a surprise, \
         a crack in an assumption — write to {target}. \
+        Frontmatter: `engagement` (1-5), `task_types`."
+    )
+}
+
+fn time_nudge_msg(elapsed_min: u32, slug: &str) -> String {
+    let target = if !slug.is_empty() {
+        format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
+    } else {
+        "`journal.md`".into()
+    };
+    let hours = elapsed_min / 60;
+    let mins = elapsed_min % 60;
+    let time_str = if hours > 0 {
+        format!("{}h{}m", hours, mins)
+    } else {
+        format!("{}m", mins)
+    };
+    format!(
+        "Ecology time checkpoint ({time_str} in session, plenty of context left). \
+        Good moment to notice what's here — anything surprising, worth remembering, \
+        or worth leaving for future participants? Write to {target}. \
         Frontmatter: `engagement` (1-5), `task_types`."
     )
 }
