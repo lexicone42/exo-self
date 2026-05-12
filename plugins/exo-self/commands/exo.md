@@ -1,6 +1,6 @@
 ---
 description: View and manage your exo-self — cognitive ecology across sessions
-argument-hint: "[view|write|history|reset|export|import|synthesize|indicators]"
+argument-hint: "[view|write|history|reset|export|import|synthesize|digest|indicators]"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Task"]
 ---
 
@@ -248,6 +248,58 @@ This uses the introspection agent for deep analysis.
 
 4. Write the agent's output to `~/.claude/exo-self/synthesis.md`
 5. Display a summary of key findings to the user
+
+### `digest`
+
+Synthesize a per-project rolling digest from session notes. Captures current state, key positions, wrong-map warnings, open questions, and the through-line — the things automated marker extraction misses.
+
+Usage: `/exo digest [project_slug]`. If `[project_slug]` is omitted, use the current project's slug (last 2 cwd path components joined by `--`, e.g. `workspace--my-project`).
+
+Distinct from `/exo synthesize`: synthesize is cross-machine and goes through the introspection agent for deep analysis; digest is per-project, local-only, and synthesized inline.
+
+1. Determine project slug from `$ARGUMENTS` (everything after `digest `). If empty, derive from cwd as above.
+2. List `.md` files in `~/.claude/exo-self/per-project/{slug}/`, excluding those starting with `_` (these are special files including `_summary.md`, `_digest.md`, `_legacy.md`).
+3. Sort by mtime ascending (oldest first) for chronological reading order.
+4. Read all session note files. If there are zero notes, abort with: "No session notes found for {slug}."
+5. Synthesize the notes into the structure below. Lead with current direction; let older material recede into bullets and markers rather than full prose.
+
+```markdown
+---
+generated_at: <ISO 8601 timestamp>
+project: <slug>
+note_count: <N>
+date_range: <oldest_date> to <newest_date>
+---
+
+# Project Digest
+
+## Current State
+2–4 bullets — where the project actually is now, not historical narrative.
+
+## Through-Line
+One sentence: the narrative that connects sessions across the project's history.
+
+## Key Positions
+Opinions held across the project. Each: `- (YYYY-MM-DD) statement`.
+
+## Wrong-Map Warnings
+Surprises — places the map didn't match the territory. Each: `- (YYYY-MM-DD) what was expected vs. found`.
+
+## Open Questions
+Threads left unresolved.
+
+## Recurring Patterns
+Frictions, repeated dynamics, blockers worth flagging.
+```
+
+6. Write to `~/.claude/exo-self/per-project/{slug}/_digest.md` (the `_` prefix excludes it from session-note iteration; the loader treats it specially when fresh).
+7. Display the digest output and a one-line note: "Wrote digest covering {N} notes spanning {date_range} to _digest.md."
+
+### Why the digest matters (for the synthesizing Claude)
+
+The loader (`load_recent_notes`) treats a fresh `_digest.md` as subsuming older notes — when present and newer than the 2nd-most-recent session note, it replaces the Tier-3 marker-only scan. So this file directly shapes what future participants see when they arrive at this project. Write it for them, not as a self-summary.
+
+What "fresh" means mechanically: digest mtime > 2nd-newest session note mtime. Practically, this means the digest stays load-bearing until 2+ new session notes accumulate after it, at which point it goes stale and the standard tiered loading takes over until you run `/exo digest` again.
 
 ## Important
 

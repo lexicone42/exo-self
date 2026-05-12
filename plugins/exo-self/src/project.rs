@@ -31,17 +31,21 @@ pub fn slug_from_path(path: &str) -> String {
 ///
 /// Tiered loading preserves accumulated high-signal traces across long project histories:
 ///   * Tier 1: `_summary.md` (curated project overview) — full prose if present.
+///   * Tier 1b: `_digest.md` (human-or-Claude-curated rolling summary) — full prose
+///     if present AND fresh (mtime newer than the 2nd-most-recent session note).
 ///   * Tier 2: latest `FULL_PROSE_NOTES` session notes — full prose.
 ///   * Tier 3: older notes — only paragraphs containing `**Opinion**` or `**Surprise**`
 ///     markers. Notes with no such markers contribute nothing and are skipped without
-///     consuming budget.
+///     consuming budget. Skipped entirely when a fresh `_digest.md` is loaded, since
+///     the digest is intended to cover everything older than the latest notes.
 ///
 /// Without tiering, dense recent prose crowds out older Opinion/Surprise markers — the
 /// explicit durable-identity and wrong-map traces — before they can be loaded. The full
 /// prose remains on disk; the loader just doesn't surface it after the first few.
 pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> String {
     /// Number of most-recent notes that get full-prose treatment. Older notes
-    /// contribute only their Opinion/Surprise paragraphs.
+    /// contribute only their Opinion/Surprise paragraphs (or are subsumed by a
+    /// fresh `_digest.md` when present).
     const FULL_PROSE_NOTES: usize = 2;
 
     let dir = paths.project_notes_dir(slug);
@@ -66,7 +70,8 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         }
     }
 
-    // Tiers 2 & 3: session notes by mtime descending, full prose then marker-only.
+    // Gather session notes (newest first) — needed for both the digest freshness
+    // check and the per-tier loading below.
     let pattern = dir.join("*.md");
     let pattern_str = pattern.to_string_lossy();
     let mut files: Vec<_> = glob::glob(&pattern_str)
@@ -81,7 +86,6 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         })
         .collect();
 
-    // Sort by mtime, newest first
     files.sort_by(|a, b| {
         let ma = std::fs::metadata(a)
             .and_then(|m| m.modified())
@@ -92,7 +96,45 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         mb.cmp(&ma)
     });
 
+    // Tier 1b: include _digest.md if it's fresher than the 2nd-most-recent note.
+    // When the digest is fresh, it subsumes the older-tier marker scan — the digest
+    // is the curated rolling summary and we don't want to double-surface its content.
+    let mut have_fresh_digest = false;
+    let digest_path = dir.join("_digest.md");
+    if digest_path.is_file()
+        && let Ok(digest_mtime) = std::fs::metadata(&digest_path).and_then(|m| m.modified())
+    {
+        // "Fresh" means newer than the second-most-recent note (or always-fresh when
+        // there are 0 or 1 notes total — the digest covers all of history in that case).
+        let second_newest_mtime = files
+            .get(1)
+            .and_then(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+        let fresh = match second_newest_mtime {
+            Some(mt) => digest_mtime > mt,
+            None => true,
+        };
+        if fresh && let Ok(text) = std::fs::read_to_string(&digest_path) {
+            let (_, prose) = markdown::parse_frontmatter(&text);
+            let prose = prose.trim();
+            if !prose.is_empty() {
+                let note = format!("**Project Digest**\n\n{prose}");
+                total += note.len();
+                parts.push(note);
+                have_fresh_digest = true;
+            }
+        }
+    }
+
+    // Tiers 2 & 3: session notes by mtime descending, full prose then marker-only.
+    // When a fresh digest is loaded, we still surface the latest few full-prose notes
+    // (the digest covers history; the recent notes cover post-digest narrative) but
+    // we skip the Tier 3 marker scan over older notes.
     for (idx, fp) in files.iter().enumerate() {
+        if idx >= FULL_PROSE_NOTES && have_fresh_digest {
+            // Older notes are subsumed by the digest.
+            break;
+        }
+
         let text = std::fs::read_to_string(fp).unwrap_or_default();
         let text = text.trim().to_string();
         if text.is_empty() {
@@ -333,32 +375,34 @@ mod tests {
         assert_eq!(result, expected);
     }
 
+    /// Build a minimal ExoPaths anchored at `root`. Only `per_project_dir` matters
+    /// for `load_recent_notes`, but the struct requires all fields populated.
+    fn paths_for_root(root: &std::path::Path) -> ExoPaths {
+        let root_buf = root.to_path_buf();
+        ExoPaths {
+            journal: root_buf.join("journal.md"),
+            interests: root_buf.join("interests.md"),
+            config: root_buf.join("config.json"),
+            meta: root_buf.join("meta.json"),
+            sessions_dir: root_buf.join("sessions"),
+            handoffs_dir: root_buf.join("handoffs"),
+            per_project_dir: root_buf.join("per-project"),
+            shared_state: root_buf.join("shared-state.json"),
+            context_window: root_buf.join("context-window.json"),
+            synthesis: root_buf.join("synthesis.md"),
+            sigils_dir: root_buf.join("sigils"),
+            traces_dir: root_buf.join("traces"),
+            root: root_buf,
+        }
+    }
+
     #[test]
     fn load_recent_notes_tiered_loading() {
         // Integration: verify that older notes contribute only their marker paragraphs.
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        let per_project = root.join("per-project");
-        let project_dir = per_project.join("test-slug");
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("test-slug");
         std::fs::create_dir_all(&project_dir).unwrap();
-
-        // Build a minimal ExoPaths pointing at the temp tree. Only per_project_dir
-        // is consulted by load_recent_notes, but all fields must be populated.
-        let paths = ExoPaths {
-            journal: root.join("journal.md"),
-            interests: root.join("interests.md"),
-            config: root.join("config.json"),
-            meta: root.join("meta.json"),
-            sessions_dir: root.join("sessions"),
-            handoffs_dir: root.join("handoffs"),
-            per_project_dir: per_project,
-            shared_state: root.join("shared-state.json"),
-            context_window: root.join("context-window.json"),
-            synthesis: root.join("synthesis.md"),
-            sigils_dir: root.join("sigils"),
-            traces_dir: root.join("traces"),
-            root: root.clone(),
-        };
 
         // Helper: write a note. Caller writes in oldest→newest order with brief sleeps
         // between writes so mtimes are naturally ordered without needing an external
@@ -424,5 +468,133 @@ mod tests {
 
         // Ancient note with no markers: dropped entirely.
         assert!(!out.contains("Ancient chatter."));
+    }
+
+    /// Helper for digest tests: write a note file. Caller pauses between writes to
+    /// produce distinct ascending mtimes.
+    fn write_note(project_dir: &std::path::Path, name: &str, date: &str, prose: &str) {
+        let body = format!("---\ndate: \"{date}\"\n---\n\n{prose}\n");
+        std::fs::write(project_dir.join(name), body).unwrap();
+    }
+
+    #[test]
+    fn load_recent_notes_fresh_digest_subsumes_older_notes() {
+        // Layout (oldest → newest by mtime):
+        //   very_old.md  — pre-digest, OUTSIDE the latest-2 window
+        //   older.md     — pre-digest, INSIDE the latest-2 window
+        //   _digest.md   — fresh: mtime > files[1] (older.md)
+        //   newer.md     — post-digest, INSIDE the latest-2 window
+        //
+        // Expected: digest + newer.md + older.md as full prose; very_old.md's
+        // markers are suppressed because a fresh digest skips the Tier-3 scan.
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("digest-fresh");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        write_note(
+            &project_dir,
+            "very_old.md",
+            "2026-02-01",
+            "Ancient narrative.\n\n**Opinion** — Pre-digest position that should be hidden.",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(
+            &project_dir,
+            "older.md",
+            "2026-03-15",
+            "Older narrative still in window.",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        let digest_body =
+            "---\ngenerated_at: 2026-05-10T00:00:00Z\n---\n\n## Through-Line\nDigest content here.";
+        std::fs::write(project_dir.join("_digest.md"), digest_body).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        write_note(&project_dir, "newer.md", "2026-05-12", "Latest narrative.");
+
+        let out = load_recent_notes(&paths, "digest-fresh", 6000);
+
+        // Digest content is surfaced under its header.
+        assert!(out.contains("**Project Digest**"), "missing digest header");
+        assert!(out.contains("Digest content here."));
+
+        // Latest two notes are full prose.
+        assert!(out.contains("Latest narrative."));
+        assert!(out.contains("Older narrative still in window."));
+
+        // The pre-digest, out-of-window note's Opinion marker is NOT surfaced —
+        // the fresh digest suppresses the Tier-3 marker scan.
+        assert!(
+            !out.contains("Pre-digest position that should be hidden."),
+            "fresh digest should suppress older notes' marker scan"
+        );
+        assert!(
+            !out.contains("Ancient narrative."),
+            "very-old prose should be dropped entirely"
+        );
+    }
+
+    #[test]
+    fn load_recent_notes_stale_digest_ignored() {
+        // When two or more newer notes exist after _digest.md, the digest is stale
+        // and falls back to the standard tiered loading (older notes' markers
+        // become visible again).
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("digest-stale");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        // The digest comes first (oldest).
+        let digest_body = "---\ngenerated_at: 2026-04-01T00:00:00Z\n---\n\nStale digest content.";
+        std::fs::write(project_dir.join("_digest.md"), digest_body).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        // Then three notes after the digest. With ≥2 newer notes, the digest is stale.
+        write_note(
+            &project_dir,
+            "older.md",
+            "2026-04-15",
+            "Older note.\n\n**Surprise** — A wrong-map worth keeping.",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(&project_dir, "mid.md", "2026-04-25", "Mid note.");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(&project_dir, "newest.md", "2026-05-12", "Newest note.");
+
+        let out = load_recent_notes(&paths, "digest-stale", 6000);
+
+        // The stale digest's content is NOT surfaced (the 2nd-newest note is newer
+        // than the digest, so the freshness check fails).
+        assert!(!out.contains("Stale digest content."));
+        assert!(!out.contains("**Project Digest**"));
+
+        // Standard tiered loading runs instead. Latest two notes are full prose;
+        // the older note's Surprise marker is still surfaced from Tier 3.
+        assert!(out.contains("Newest note."));
+        assert!(out.contains("Mid note."));
+        assert!(out.contains("**Surprise** — A wrong-map worth keeping."));
+        assert!(
+            !out.contains("Older note."),
+            "older note's non-marker prose should not leak"
+        );
+    }
+
+    #[test]
+    fn load_recent_notes_digest_only_no_notes() {
+        // Edge case: _digest.md exists but there are zero session notes.
+        // The digest counts as always-fresh and is surfaced on its own.
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("digest-only");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let digest_body = "---\ngenerated_at: 2026-05-10T00:00:00Z\n---\n\nSolo digest.";
+        std::fs::write(project_dir.join("_digest.md"), digest_body).unwrap();
+
+        let out = load_recent_notes(&paths, "digest-only", 6000);
+        assert!(out.contains("**Project Digest**"));
+        assert!(out.contains("Solo digest."));
     }
 }
