@@ -327,6 +327,22 @@ pub fn run() {
         ));
     }
 
+    // Suggest re-digesting when enough new notes have accumulated since the last
+    // `_digest.md`. Threshold is permissive — the loader's freshness rule already
+    // covers small drift (digest is load-bearing until 2 newer notes); this hint
+    // signals "enough drift accumulated that a fresh synthesis would land well."
+    if !project_slug.is_empty() {
+        const DIGEST_STALENESS_HINT_THRESHOLD: usize = 5;
+        let new_note_count = project::count_notes_after_digest(&paths, &project_slug);
+        if new_note_count >= DIGEST_STALENESS_HINT_THRESHOLD {
+            sections.push(format!(
+                "**Digest stale** — {new_note_count} new session notes since the last `_digest.md`. \
+                 Running `/exo digest` would refresh the rolling synthesis and restore the digest \
+                 as the load-bearing summary for older history."
+            ));
+        }
+    }
+
     // Inject latest handoff as continuity bridge (one-shot: read then delete)
     // This covers the "/clear without compaction" gap — the previous session's
     // working direction, discoveries, and unfinished threads survive the clear.

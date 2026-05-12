@@ -182,6 +182,44 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
     parts.join("\n\n---\n\n")
 }
 
+/// Count session notes written after `_digest.md` for a project.
+///
+/// Returns `0` when no digest exists or no session notes exist. Session-start uses this
+/// to decide whether to surface a "consider re-digesting" hint — the loader's freshness
+/// rule kicks in at 2 newer notes (point at which the digest stops being load-bearing),
+/// but the hint should fire at a higher threshold to avoid nagging every session.
+pub fn count_notes_after_digest(paths: &ExoPaths, slug: &str) -> usize {
+    let dir = paths.project_notes_dir(slug);
+    if !dir.is_dir() {
+        return 0;
+    }
+
+    let Ok(digest_mtime) = std::fs::metadata(dir.join("_digest.md")).and_then(|m| m.modified())
+    else {
+        return 0;
+    };
+
+    let pattern = dir.join("*.md");
+    let pattern_str = pattern.to_string_lossy();
+    glob::glob(&pattern_str)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| !n.starts_with('_'))
+        })
+        .filter(|p| {
+            std::fs::metadata(p)
+                .and_then(|m| m.modified())
+                .map(|m| m > digest_mtime)
+                .unwrap_or(false)
+        })
+        .count()
+}
+
 /// Extract paragraphs containing `**Opinion**` or `**Surprise**` markers from prose.
 ///
 /// Paragraphs are split on blank lines (markdown paragraph boundary). Paragraphs without
@@ -579,6 +617,55 @@ mod tests {
             !out.contains("Older note."),
             "older note's non-marker prose should not leak"
         );
+    }
+
+    #[test]
+    fn count_notes_after_digest_returns_zero_without_digest() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("no-digest");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        write_note(&project_dir, "a.md", "2026-05-01", "First.");
+        write_note(&project_dir, "b.md", "2026-05-02", "Second.");
+
+        assert_eq!(count_notes_after_digest(&paths, "no-digest"), 0);
+    }
+
+    #[test]
+    fn count_notes_after_digest_counts_only_newer_notes() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("with-digest");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        // Two notes pre-digest.
+        write_note(&project_dir, "old1.md", "2026-04-01", "Old one.");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(&project_dir, "old2.md", "2026-04-15", "Old two.");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        // Digest written here.
+        std::fs::write(project_dir.join("_digest.md"), "---\n---\n\nDigest body.").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        // Three notes after digest.
+        write_note(&project_dir, "new1.md", "2026-05-01", "New one.");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(&project_dir, "new2.md", "2026-05-05", "New two.");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(&project_dir, "new3.md", "2026-05-10", "New three.");
+
+        // Only post-digest notes are counted; the underscore-prefixed digest file
+        // itself is excluded by the filter.
+        assert_eq!(count_notes_after_digest(&paths, "with-digest"), 3);
+    }
+
+    #[test]
+    fn count_notes_after_digest_returns_zero_for_missing_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        // Don't create any project dir.
+        assert_eq!(count_notes_after_digest(&paths, "nonexistent"), 0);
     }
 
     #[test]
