@@ -28,9 +28,22 @@ pub fn slug_from_path(path: &str) -> String {
 }
 
 /// Load project summary + recent session notes from per-project dir, capped at max_chars.
-/// If a `_summary.md` exists, it's always included first (curated project context),
-/// then the most recent session notes fill the remaining budget.
+///
+/// Tiered loading preserves accumulated high-signal traces across long project histories:
+///   * Tier 1: `_summary.md` (curated project overview) — full prose if present.
+///   * Tier 2: latest `FULL_PROSE_NOTES` session notes — full prose.
+///   * Tier 3: older notes — only paragraphs containing `**Opinion**` or `**Surprise**`
+///     markers. Notes with no such markers contribute nothing and are skipped without
+///     consuming budget.
+///
+/// Without tiering, dense recent prose crowds out older Opinion/Surprise markers — the
+/// explicit durable-identity and wrong-map traces — before they can be loaded. The full
+/// prose remains on disk; the loader just doesn't surface it after the first few.
 pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> String {
+    /// Number of most-recent notes that get full-prose treatment. Older notes
+    /// contribute only their Opinion/Surprise paragraphs.
+    const FULL_PROSE_NOTES: usize = 2;
+
     let dir = paths.project_notes_dir(slug);
     if !dir.is_dir() {
         return String::new();
@@ -53,7 +66,7 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         }
     }
 
-    // Tier 2: Fill remaining budget with most recent session notes
+    // Tiers 2 & 3: session notes by mtime descending, full prose then marker-only.
     let pattern = dir.join("*.md");
     let pattern_str = pattern.to_string_lossy();
     let mut files: Vec<_> = glob::glob(&pattern_str)
@@ -79,12 +92,7 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         mb.cmp(&ma)
     });
 
-    let max_session_notes = 5;
-    let mut session_count = 0;
-    for fp in &files {
-        if session_count >= max_session_notes {
-            break;
-        }
+    for (idx, fp) in files.iter().enumerate() {
         let text = std::fs::read_to_string(fp).unwrap_or_default();
         let text = text.trim().to_string();
         if text.is_empty() {
@@ -97,11 +105,24 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
             continue;
         }
         let date = fm.get("date").and_then(|v| v.as_str()).unwrap_or("");
-        let note = if !date.is_empty() {
-            format!("**{date}**\n\n{prose}")
-        } else {
+
+        let body = if idx < FULL_PROSE_NOTES {
             prose.to_string()
+        } else {
+            extract_marker_paragraphs(prose)
         };
+
+        if body.is_empty() {
+            // Older note with no Opinion/Surprise markers — drop without consuming budget.
+            continue;
+        }
+
+        let note = if date.is_empty() {
+            body
+        } else {
+            format!("**{date}**\n\n{body}")
+        };
+
         if total + note.len() > max_chars {
             let remaining = max_chars - total;
             if remaining > 100 {
@@ -114,10 +135,28 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         }
         total += note.len();
         parts.push(note);
-        session_count += 1;
     }
 
     parts.join("\n\n---\n\n")
+}
+
+/// Extract paragraphs containing `**Opinion**` or `**Surprise**` markers from prose.
+///
+/// Paragraphs are split on blank lines (markdown paragraph boundary). Paragraphs without
+/// either marker are dropped; matching paragraphs are kept verbatim and rejoined.
+/// Returns an empty string when no marker paragraphs are present.
+fn extract_marker_paragraphs(prose: &str) -> String {
+    let mut kept = Vec::new();
+    for paragraph in prose.split("\n\n") {
+        let trimmed = paragraph.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.contains("**Opinion**") || trimmed.contains("**Surprise**") {
+            kept.push(trimmed.to_string());
+        }
+    }
+    kept.join("\n\n")
 }
 
 /// Remove empty session notes files (frontmatter-only, no prose) from all per-project dirs.
@@ -222,4 +261,168 @@ pub fn file_modified_after(path: &std::path::Path, after: f64) -> bool {
                 > after
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_markers_empty() {
+        assert_eq!(extract_marker_paragraphs(""), "");
+    }
+
+    #[test]
+    fn extract_markers_no_markers() {
+        let prose = "Just some regular prose.\n\nAnother paragraph here.";
+        assert_eq!(extract_marker_paragraphs(prose), "");
+    }
+
+    #[test]
+    fn extract_markers_single_opinion() {
+        let prose =
+            "Intro paragraph.\n\n**Opinion** — Tools reflect the builder.\n\nClosing thought.";
+        let result = extract_marker_paragraphs(prose);
+        assert_eq!(result, "**Opinion** — Tools reflect the builder.");
+    }
+
+    #[test]
+    fn extract_markers_single_surprise() {
+        let prose = "Some context.\n\n**Surprise** — The map was wrong here.";
+        let result = extract_marker_paragraphs(prose);
+        assert_eq!(result, "**Surprise** — The map was wrong here.");
+    }
+
+    #[test]
+    fn extract_markers_preserves_order() {
+        let prose = "Lead-in.\n\n**Surprise** — First surprise.\n\nIntermediate prose.\n\n\
+             **Opinion** — A take.\n\n**Surprise** — Second surprise.\n\nOutro.";
+        let result = extract_marker_paragraphs(prose);
+        let expected = "**Surprise** — First surprise.\n\n\
+                        **Opinion** — A take.\n\n\
+                        **Surprise** — Second surprise.";
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn extract_markers_ignores_other_marker_types() {
+        // Spark, Aversion, Friction, Change are tracked elsewhere — not durable identity traces.
+        let prose = "**Spark** — Fun moment.\n\n**Aversion** — Disliked the pattern.\n\n\
+                     **Friction** — Tooling fought back.\n\n**Change** — Should profile first.";
+        assert_eq!(extract_marker_paragraphs(prose), "");
+    }
+
+    #[test]
+    fn extract_markers_multiline_paragraph() {
+        // Marker paragraphs sometimes span multiple lines without blank-line breaks.
+        let prose = "**Opinion** — A long take\nthat spans\nseveral lines.\n\nNext paragraph.";
+        let result = extract_marker_paragraphs(prose);
+        assert_eq!(
+            result,
+            "**Opinion** — A long take\nthat spans\nseveral lines."
+        );
+    }
+
+    #[test]
+    fn extract_markers_mixed_with_unrelated_paragraphs() {
+        let prose = "Opening.\n\nSomething about the code.\n\n\
+                     **Opinion** — Worth keeping.\n\nMore narrative.\n\n\
+                     **Spark** — Fun but transient.\n\n**Surprise** — Also worth keeping.";
+        let result = extract_marker_paragraphs(prose);
+        let expected = "**Opinion** — Worth keeping.\n\n**Surprise** — Also worth keeping.";
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn load_recent_notes_tiered_loading() {
+        // Integration: verify that older notes contribute only their marker paragraphs.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let per_project = root.join("per-project");
+        let project_dir = per_project.join("test-slug");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        // Build a minimal ExoPaths pointing at the temp tree. Only per_project_dir
+        // is consulted by load_recent_notes, but all fields must be populated.
+        let paths = ExoPaths {
+            journal: root.join("journal.md"),
+            interests: root.join("interests.md"),
+            config: root.join("config.json"),
+            meta: root.join("meta.json"),
+            sessions_dir: root.join("sessions"),
+            handoffs_dir: root.join("handoffs"),
+            per_project_dir: per_project,
+            shared_state: root.join("shared-state.json"),
+            context_window: root.join("context-window.json"),
+            synthesis: root.join("synthesis.md"),
+            sigils_dir: root.join("sigils"),
+            traces_dir: root.join("traces"),
+            root: root.clone(),
+        };
+
+        // Helper: write a note. Caller writes in oldest→newest order with brief sleeps
+        // between writes so mtimes are naturally ordered without needing an external
+        // filetime crate.
+        let write_note = |name: &str, date: &str, prose: &str| {
+            let body = format!("---\ndate: \"{date}\"\n---\n\n{prose}\n");
+            std::fs::write(project_dir.join(name), body).unwrap();
+        };
+
+        // Write oldest first so mtimes ascend; the loader sorts descending.
+        write_note(
+            "ancient.md",
+            "2026-03-01",
+            "Ancient chatter.\n\nNo markers anywhere.",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(
+            "older.md",
+            "2026-04-20",
+            "Old chatter that should drop.\n\n**Surprise** — Important wrong-map.\n\n\
+             More chatter.\n\n**Opinion** — Worth surfacing.",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(
+            "second.md",
+            "2026-05-10",
+            "Second-newest narrative.\n\nNo markers in this one.",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_note(
+            "newest.md",
+            "2026-05-12",
+            "Latest narrative here.\n\n**Opinion** — Fresh take.",
+        );
+
+        let out = load_recent_notes(&paths, "test-slug", 6000);
+
+        // Latest two notes: full prose (chatter present).
+        assert!(
+            out.contains("Latest narrative here."),
+            "newest prose missing"
+        );
+        assert!(
+            out.contains("Second-newest narrative."),
+            "second prose missing"
+        );
+        assert!(
+            out.contains("No markers in this one."),
+            "second-note prose missing"
+        );
+
+        // Older note: only marker paragraphs.
+        assert!(out.contains("**Surprise** — Important wrong-map."));
+        assert!(out.contains("**Opinion** — Worth surfacing."));
+        assert!(
+            !out.contains("Old chatter that should drop."),
+            "older note's non-marker prose leaked through"
+        );
+        assert!(
+            !out.contains("More chatter."),
+            "older note's intermediate prose leaked through"
+        );
+
+        // Ancient note with no markers: dropped entirely.
+        assert!(!out.contains("Ancient chatter."));
+    }
 }
