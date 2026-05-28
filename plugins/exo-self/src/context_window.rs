@@ -21,9 +21,30 @@ pub struct ContextWindow {
 /// 4M chars for a 1M-token window — both 4 chars/token.
 const CHARS_PER_TOKEN: u64 = 4;
 
+/// Token data younger than this is treated as current (source "tokens").
+const FRESH_TOKEN_SECS: f64 = 120.0;
+/// Token data between FRESH and this is stale-but-usable (source "tokens_stale").
+/// A real percentage minutes old beats a filesize guess that, on a compacted session,
+/// over-reports by an order of magnitude (see #16). Beyond this it's treated as
+/// abandoned and we fall through to the filesize estimate.
+const USABLE_TOKEN_SECS: f64 = 600.0;
+
+/// Extract a usage ratio (0.0–1.0) from token data, preferring the explicit
+/// `used_percentage` and falling back to the integer `usage_pct`.
+fn token_ratio(ctx: &ContextWindow) -> Option<f64> {
+    if let Some(pct) = ctx.used_percentage {
+        Some(pct / 100.0)
+    } else if ctx.usage_pct > 0 {
+        Some(ctx.usage_pct as f64 / 100.0)
+    } else {
+        None
+    }
+}
+
 /// Get context usage ratio, preferring token-accurate data from statusline.
 /// Returns (ratio, source) where source is one of:
-///   * "tokens"          — fresh, token-accurate percentage from statusline (best)
+///   * "tokens"          — fresh (<2min) token-accurate percentage from statusline (best)
+///   * "tokens_stale"    — token percentage 2–10min old; still beats filesize (#16)
 ///   * "filesize_window" — transcript filesize ÷ (real context window × chars/token)
 ///   * "filesize"        — transcript filesize ÷ static config estimate (last resort)
 ///   * "none"            — no signal available
@@ -32,21 +53,29 @@ pub fn get_usage_ratio(
     transcript_path: &str,
     estimated_max_chars: u64,
 ) -> (f64, &'static str) {
-    // Read the statusline-written JSON once; it serves two purposes below — the fresh
+    // Read the statusline-written JSON once; it serves two purposes below — the
     // token percentage AND the (staleness-independent) real context window size.
     let ctx = std::fs::read_to_string(&paths.context_window)
         .ok()
         .and_then(|data| serde_json::from_str::<ContextWindow>(&data).ok());
 
-    // Priority 1: fresh, token-accurate percentage from statusline.
+    // Priority 1: token-accurate percentage from statusline.
+    //
+    // We prefer a real percentage even when it's minutes stale, because the filesize
+    // fallback over-reports badly on compacted sessions (#16): the transcript file is
+    // append-only across compactions, so its size reflects cumulative history, not live
+    // context. A stale token reading errs in the safe direction (usage only grows, so an
+    // old reading under-reports → nudges fire slightly late) where filesize errs in the
+    // annoying direction (over-reports → false "context full" alarms).
     if let Some(ref ctx) = ctx
-        && now() - ctx.updated_at < 120.0
+        && let Some(ratio) = token_ratio(ctx)
     {
-        if let Some(pct) = ctx.used_percentage {
-            return (pct / 100.0, "tokens");
+        let age = now() - ctx.updated_at;
+        if age < FRESH_TOKEN_SECS {
+            return (ratio, "tokens");
         }
-        if ctx.usage_pct > 0 {
-            return (ctx.usage_pct as f64 / 100.0, "tokens");
+        if age < USABLE_TOKEN_SECS {
+            return (ratio, "tokens_stale");
         }
     }
 
@@ -132,7 +161,7 @@ mod tests {
 
     #[test]
     fn stale_json_still_supplies_window_size() {
-        // Token counts are stale (>120s), but the window size is still valid. The
+        // Token data is abandoned (>10min old), but the window size is still valid. The
         // filesize ratio must use the real 1M window (×4 chars) — NOT the 800K config.
         let dir = tempfile::tempdir().unwrap();
         let cw = dir.path().join(".context-window.json");
@@ -148,6 +177,25 @@ mod tests {
         let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 800_000);
         assert_eq!(source, "filesize_window");
         assert!((ratio - 0.20).abs() < 1e-6, "expected ~0.20, got {ratio}");
+    }
+
+    #[test]
+    fn stale_but_usable_token_beats_filesize() {
+        // #16: token data 2–10min old must be preferred over a filesize guess that would
+        // saturate on a large (compacted) transcript. 300s old, 30% real, 5MB transcript.
+        let dir = tempfile::tempdir().unwrap();
+        let cw = dir.path().join(".context-window.json");
+        let json = format!(
+            r#"{{"used_percentage": 30.0, "context_window_size": 1000000, "updated_at": {}}}"#,
+            now() - 300.0
+        );
+        std::fs::write(&cw, json).unwrap();
+        let paths = paths_with_context_window(&cw);
+        let transcript = write_transcript(dir.path(), 5_000_000); // would be >100% via filesize
+
+        let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "tokens_stale");
+        assert!((ratio - 0.30).abs() < 1e-9, "expected 0.30, got {ratio}");
     }
 
     #[test]
