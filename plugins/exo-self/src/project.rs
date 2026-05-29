@@ -2,16 +2,18 @@ use crate::markdown;
 use crate::paths::ExoPaths;
 use crate::state::SessionState;
 
-/// Derive a stable project slug from cwd.
-/// Uses last 2 path components joined by -- for reasonable uniqueness.
-/// e.g. /datar/workspace/my-project → workspace--my-project
+/// Derive a stable project slug from the current working directory.
+/// Prefers the git repo root so every subdirectory of a project shares one identity.
 pub fn slug_from_cwd() -> String {
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
-    slug_from_path(&cwd)
+    slug_for_dir(&cwd)
 }
 
+/// Last-two-path-components heuristic, joined by `--`.
+/// e.g. /datar/workspace/my-project → workspace--my-project
+/// Pure (no filesystem access) — used as the building block and the non-repo fallback.
 pub fn slug_from_path(path: &str) -> String {
     if path.is_empty() {
         return String::new();
@@ -24,6 +26,39 @@ pub fn slug_from_path(path: &str) -> String {
         last.to_string()
     } else {
         String::new()
+    }
+}
+
+/// Walk up from `start` looking for a `.git` entry (a directory for normal repos, a
+/// file for worktrees/submodules). Returns the nearest ancestor (including `start`)
+/// that contains one.
+///
+/// This is what lets every subdirectory of a project share a single ecology identity.
+/// Without it the slug is cwd-dependent: a session launched from `repo/plugins/foo`
+/// derived a separate slug (`plugins--foo`), fragmenting into an empty note-store and
+/// silently losing all accumulated project continuity.
+fn find_git_root(start: &str) -> Option<std::path::PathBuf> {
+    if start.is_empty() {
+        return None;
+    }
+    let mut dir = std::path::PathBuf::from(start);
+    loop {
+        if dir.join(".git").exists() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Resolve a project slug for a directory, preferring the git repo root so all
+/// subdirectories of a project map to one identity. Falls back to the last-two-
+/// path-components heuristic when the directory isn't inside a git repo.
+fn slug_for_dir(dir: &str) -> String {
+    match find_git_root(dir) {
+        Some(root) => slug_from_path(&root.to_string_lossy()),
+        None => slug_from_path(dir),
     }
 }
 
@@ -303,7 +338,7 @@ pub fn cleanup_empty_notes(paths: &ExoPaths) {
 /// Derive project slug from hook input, preferring cwd from Claude Code over process CWD.
 pub fn slug_from_input(cwd: &str) -> String {
     if !cwd.is_empty() {
-        slug_from_path(cwd)
+        slug_for_dir(cwd)
     } else {
         slug_from_cwd()
     }
@@ -346,6 +381,56 @@ pub fn file_modified_after(path: &std::path::Path, after: f64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn slug_from_path_is_pure_last_two() {
+        assert_eq!(slug_from_path("/a/b/c/d"), "c--d");
+        assert_eq!(
+            slug_from_path("/datar/workspace/my-project"),
+            "workspace--my-project"
+        );
+        assert_eq!(slug_from_path("/only"), "only");
+        assert_eq!(slug_from_path(""), "");
+    }
+
+    #[test]
+    fn slug_uses_git_root_from_subdir() {
+        // <tmp>/parent/myrepo/.git, with a deep subdir below it.
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("parent").join("myrepo");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        let subdir = repo.join("plugins").join("inner");
+        std::fs::create_dir_all(&subdir).unwrap();
+
+        let root_slug = slug_from_path(&repo.to_string_lossy());
+        // Root and deep subdir resolve to the SAME slug — no fragmentation.
+        assert_eq!(slug_from_input(&subdir.to_string_lossy()), root_slug);
+        assert_eq!(slug_from_input(&repo.to_string_lossy()), root_slug);
+        // And it's the repo root's identity, not the subdir's components.
+        assert_eq!(slug_from_input(&subdir.to_string_lossy()), "parent--myrepo");
+        assert!(!slug_from_input(&subdir.to_string_lossy()).contains("inner"));
+    }
+
+    #[test]
+    fn slug_detects_git_dir_at_cwd_itself() {
+        // .git directly at the queried dir (repo root case).
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("grandparent").join("repo");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        assert_eq!(
+            slug_from_input(&repo.to_string_lossy()),
+            "grandparent--repo"
+        );
+    }
+
+    #[test]
+    fn slug_falls_back_to_path_without_git() {
+        // No .git anywhere in the tree -> last-two-components heuristic.
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("alpha").join("beta");
+        std::fs::create_dir_all(&sub).unwrap();
+        assert_eq!(slug_from_input(&sub.to_string_lossy()), "alpha--beta");
+    }
 
     #[test]
     fn extract_markers_empty() {
