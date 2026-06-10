@@ -175,13 +175,17 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
         if text.is_empty() {
             continue;
         }
-        // Strip frontmatter — only inject date header + prose to save tokens
+        // Strip frontmatter — only inject a date · model header + prose to save tokens.
+        // Model provenance matters now that the ecology is cross-lineage: a reader
+        // should know whether a pattern claim is testimony from their own kind of
+        // mind or from a different lineage (e.g. Opus vs Fable).
         let (fm, prose) = markdown::parse_frontmatter(&text);
         let prose = prose.trim();
         if prose.is_empty() {
             continue;
         }
         let date = fm.get("date").and_then(|v| v.as_str()).unwrap_or("");
+        let model = fm.get("model").and_then(|v| v.as_str()).unwrap_or("");
 
         let body = if idx < FULL_PROSE_NOTES {
             prose.to_string()
@@ -194,10 +198,11 @@ pub fn load_recent_notes(paths: &ExoPaths, slug: &str, max_chars: usize) -> Stri
             continue;
         }
 
-        let note = if date.is_empty() {
-            body
-        } else {
-            format!("**{date}**\n\n{body}")
+        let note = match (date.is_empty(), model.is_empty()) {
+            (false, false) => format!("**{date} · {model}**\n\n{body}"),
+            (false, true) => format!("**{date}**\n\n{body}"),
+            (true, false) => format!("**{model}**\n\n{body}"),
+            (true, true) => body,
         };
 
         if total + note.len() > max_chars {
@@ -702,6 +707,35 @@ mod tests {
             !out.contains("Older note."),
             "older note's non-marker prose should not leak"
         );
+    }
+
+    #[test]
+    fn injected_notes_carry_model_provenance() {
+        // Cross-lineage ecology: the injected header must say whose testimony this is.
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("provenance");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        std::fs::write(
+            project_dir.join("a.md"),
+            "---\ndate: \"2026-05-29\"\nmodel: \"claude-fable-5\"\n---\n\nFable testimony.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            project_dir.join("b.md"),
+            "---\ndate: \"2026-05-28\"\n---\n\nNo model recorded.\n",
+        )
+        .unwrap();
+
+        let out = load_recent_notes(&paths, "provenance", 6000);
+        assert!(
+            out.contains("**2026-05-29 · claude-fable-5**"),
+            "model provenance missing from header: {out}"
+        );
+        // Notes without a model field keep the date-only header (no dangling separator).
+        assert!(out.contains("**2026-05-28**"));
+        assert!(!out.contains("2026-05-28 ·"));
     }
 
     #[test]
