@@ -327,19 +327,37 @@ pub fn run() {
         ));
     }
 
-    // Suggest re-digesting when enough new notes have accumulated since the last
-    // `_digest.md`. Threshold is permissive — the loader's freshness rule already
-    // covers small drift (digest is load-bearing until 2 newer notes); this hint
-    // signals "enough drift accumulated that a fresh synthesis would land well."
+    // Digest hints, two cases:
+    //  - a digest exists but enough new notes have accrued since → suggest refreshing it.
+    //  - no digest yet, but the project has accumulated many notes → suggest a first one.
+    // The second branch matters because count_notes_after_digest returns 0 when there is
+    // no digest, so without it a long-running project (e.g. 169 notes, no curation layer)
+    // would never be prompted to create its first digest.
     if !project_slug.is_empty() {
         const DIGEST_STALENESS_HINT_THRESHOLD: usize = 5;
-        let new_note_count = project::count_notes_after_digest(&paths, &project_slug);
-        if new_note_count >= DIGEST_STALENESS_HINT_THRESHOLD {
-            sections.push(format!(
-                "**Digest stale** — {new_note_count} new session notes since the last `_digest.md`. \
-                 Running `/exo digest` would refresh the rolling synthesis and restore the digest \
-                 as the load-bearing summary for older history."
-            ));
+        const FIRST_DIGEST_HINT_THRESHOLD: usize = 25;
+        let digest_exists = paths
+            .project_notes_dir(&project_slug)
+            .join("_digest.md")
+            .is_file();
+        if digest_exists {
+            let new_note_count = project::count_notes_after_digest(&paths, &project_slug);
+            if new_note_count >= DIGEST_STALENESS_HINT_THRESHOLD {
+                sections.push(format!(
+                    "**Digest stale** — {new_note_count} new session notes since the last `_digest.md`. \
+                     Running `/exo digest` would refresh the rolling synthesis and restore the digest \
+                     as the load-bearing summary for older history."
+                ));
+            }
+        } else {
+            let total_notes = project::count_session_notes(&paths, &project_slug);
+            if total_notes >= FIRST_DIGEST_HINT_THRESHOLD {
+                sections.push(format!(
+                    "**No digest yet** — this project has {total_notes} session notes and no `_digest.md`. \
+                     Running `/exo digest` would create a curated rolling summary so accumulated \
+                     Opinion/Surprise traces aren't crowded out of the load window by recent prose."
+                ));
+            }
         }
     }
 

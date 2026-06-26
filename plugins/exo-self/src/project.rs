@@ -260,6 +260,30 @@ pub fn count_notes_after_digest(paths: &ExoPaths, slug: &str) -> usize {
         .count()
 }
 
+/// Count total session notes for a project, excluding underscore-prefixed special files
+/// (`_digest.md`, `_summary.md`, `_legacy.md`). Used to prompt for a *first* digest on
+/// projects that have accumulated many notes but were never curated — a case
+/// `count_notes_after_digest` can't catch, since it returns 0 when no digest exists.
+pub fn count_session_notes(paths: &ExoPaths, slug: &str) -> usize {
+    let dir = paths.project_notes_dir(slug);
+    if !dir.is_dir() {
+        return 0;
+    }
+    let pattern = dir.join("*.md");
+    let pattern_str = pattern.to_string_lossy();
+    glob::glob(&pattern_str)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| !n.starts_with('_'))
+        })
+        .count()
+}
+
 /// Extract paragraphs containing `**Opinion**` or `**Surprise**` markers from prose.
 ///
 /// Paragraphs are split on blank lines (markdown paragraph boundary). Paragraphs without
@@ -736,6 +760,26 @@ mod tests {
         // Notes without a model field keep the date-only header (no dangling separator).
         assert!(out.contains("**2026-05-28**"));
         assert!(!out.contains("2026-05-28 ·"));
+    }
+
+    #[test]
+    fn count_session_notes_excludes_underscore_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        let project_dir = paths.project_notes_dir("counting");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::write(project_dir.join("a.md"), "x").unwrap();
+        std::fs::write(project_dir.join("b.md"), "x").unwrap();
+        std::fs::write(project_dir.join("_digest.md"), "x").unwrap();
+        std::fs::write(project_dir.join("_summary.md"), "x").unwrap();
+        assert_eq!(count_session_notes(&paths, "counting"), 2);
+    }
+
+    #[test]
+    fn count_session_notes_zero_for_missing_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        assert_eq!(count_session_notes(&paths, "nope"), 0);
     }
 
     #[test]
