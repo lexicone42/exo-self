@@ -12,20 +12,16 @@ pub fn run() {
     let paths = ExoPaths::new();
     let mut state = SessionState::load(&paths, &input.session_id);
 
-    // Track task completions
+    // Record the completion — the counter is consumed by context_monitor's engagement
+    // detection (Grinding/Struggling patterns), so this side-effect must survive.
     state.task_completions += 1;
     state.last_task_completed_at = state::now();
+    state.save(&paths);
 
-    // Nudge on every 5th task completion
-    if state.task_completions.is_multiple_of(5) && !state.task_reflection_suppressed {
-        let msg = format!(
-            "Exo-self: {} tasks done. Anything worth noting in your session notes?",
-            state.task_completions
-        );
-        state.save(&paths);
-        hook_io::hook_output("TaskCompleted", &msg);
-    } else {
-        state.save(&paths);
-        hook_io::empty_output();
-    }
+    // Current Claude Code rejects hookSpecificOutput/additionalContext on TaskCompleted
+    // (#19 audit; docs confirm the event accepts only exit-code-2 / continue:false). The
+    // former "every 5th task" reflection nudge can no longer be injected here — and the
+    // UserPromptSubmit checkpoints already carry the reflective prompting — so this handler
+    // now records the completion and returns a no-op instead of hard-failing validation.
+    hook_io::empty_output();
 }
