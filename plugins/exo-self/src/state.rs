@@ -53,6 +53,10 @@ pub struct SessionState {
 
     // Time-based nudges (for 1M context windows where percentage thresholds rarely fire)
     pub time_nudge_count: u32,
+
+    // Reasoning-effort level captured from hook input when present (e.g. "xhigh").
+    // Empty when the host doesn't supply it — an additive welfare/intensity signal.
+    pub effort: String,
 }
 
 impl Default for SessionState {
@@ -88,6 +92,7 @@ impl Default for SessionState {
             last_stop_time: 0.0,
             scouted: false,
             time_nudge_count: 0,
+            effort: String::new(),
         }
     }
 }

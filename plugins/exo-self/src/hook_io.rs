@@ -17,6 +17,10 @@ pub struct HookInput {
     pub stop_hook_active: bool,
     pub agent_type: String,
     pub permission_mode: String,
+    /// Reasoning-effort level, when the host supplies it (empty otherwise). Spike (#19
+    /// follow-up): confirmed present in this Claude Code's transcript records; captured
+    /// gracefully to verify empirically which hook events actually carry it in stdin.
+    pub effort: String,
 }
 
 impl HookInput {
@@ -96,6 +100,24 @@ pub fn pre_tool_use_decision(decision: &str, reason: &str) {
 /// Print empty JSON (no-op output)
 pub fn empty_output() {
     println!("{{}}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hookinput_captures_effort_when_present() {
+        let hi: HookInput = serde_json::from_str(r#"{"session_id":"s","effort":"xhigh"}"#).unwrap();
+        assert_eq!(hi.effort, "xhigh");
+    }
+
+    #[test]
+    fn hookinput_effort_defaults_empty_when_absent() {
+        // Graceful degradation: hosts/events without the field must not break parsing.
+        let hi: HookInput = serde_json::from_str(r#"{"session_id":"s"}"#).unwrap();
+        assert_eq!(hi.effort, "");
+    }
 }
 
 /// Read raw stdin as a serde_json::Value (for statusline which needs full JSON)

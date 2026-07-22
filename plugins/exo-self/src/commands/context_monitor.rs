@@ -147,6 +147,12 @@ pub fn run() {
         }
     }
 
+    // Effort-signal spike: capture reasoning effort if the host supplies it on this
+    // (UserPromptSubmit) event. Graceful — empty input.effort leaves state untouched.
+    if !input.effort.is_empty() {
+        state.effort = input.effort.clone();
+    }
+
     state.save(&paths);
 
     if let Some(msg) = output_msg {

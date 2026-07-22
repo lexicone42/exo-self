@@ -12,6 +12,14 @@ pub fn run() {
     let mut state = SessionState::load(&paths, session_id);
     let session_start = state.session_start;
 
+    // Effort-signal spike: the Stop event is the agent's documented carrier of `effort`.
+    // Capture before the early-exit guards (which return without saving) and persist
+    // immediately, so the signal survives regardless of which path this hook takes.
+    if !input.effort.is_empty() && state.effort != input.effort {
+        state.effort = input.effort.clone();
+        state.save(&paths);
+    }
+
     // --- Bookkeeping BEFORE early-exit guards ---
     let wrote_notes = project::detect_wrote_notes(&state, &paths, session_start);
 
