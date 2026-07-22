@@ -48,16 +48,37 @@ fn token_ratio(ctx: &ContextWindow) -> Option<f64> {
 ///   * "filesize_window" — transcript filesize ÷ (real context window × chars/token)
 ///   * "filesize"        — transcript filesize ÷ static config estimate (last resort)
 ///   * "none"            — no signal available
+///
+/// Session identity (#19): with concurrent sessions, the legacy shared
+/// .context-window.json holds whichever session wrote last — trusting it blindly
+/// makes one session read a neighbor's usage on the *best* code path and prematurely
+/// wind down. So: prefer the per-session file (its path IS the validation); accept
+/// the legacy file only when its embedded session_id matches ours (or when we have
+/// no session_id to validate with, preserving old single-session behavior). A
+/// mismatched record contributes nothing — not even its window size, since the
+/// neighbor may be running a different window (200K vs 1M).
 pub fn get_usage_ratio(
     paths: &ExoPaths,
+    session_id: &str,
     transcript_path: &str,
     estimated_max_chars: u64,
 ) -> (f64, &'static str) {
-    // Read the statusline-written JSON once; it serves two purposes below — the
-    // token percentage AND the (staleness-independent) real context window size.
-    let ctx = std::fs::read_to_string(&paths.context_window)
-        .ok()
-        .and_then(|data| serde_json::from_str::<ContextWindow>(&data).ok());
+    // Prefer the per-session file; fall back to the legacy shared file only if its
+    // session_id checks out. The surviving `ctx` also supplies the window size for
+    // the filesize denominator below — validated records only.
+    let read = |p: &std::path::Path| {
+        std::fs::read_to_string(p)
+            .ok()
+            .and_then(|data| serde_json::from_str::<ContextWindow>(&data).ok())
+    };
+    let per_session = if session_id.is_empty() {
+        None
+    } else {
+        read(&paths.context_window_file(session_id))
+    };
+    let ctx = per_session.or_else(|| {
+        read(&paths.context_window).filter(|c| session_id.is_empty() || c.session_id == session_id)
+    });
 
     // Priority 1: token-accurate percentage from statusline.
     //
@@ -142,6 +163,72 @@ mod tests {
         path
     }
 
+    /// Write a context-window JSON with an embedded session_id.
+    fn write_ctx(path: &std::path::Path, session_id: &str, pct: f64, window: u64) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        let json = format!(
+            r#"{{"used_percentage": {pct}, "context_window_size": {window}, "session_id": "{session_id}", "updated_at": {}}}"#,
+            now()
+        );
+        std::fs::write(path, json).unwrap();
+    }
+
+    #[test]
+    fn per_session_file_preferred_over_shared() {
+        // #19: shared file belongs to a concurrent session at 90%; our per-session
+        // file says 20%. Must read our own.
+        let dir = tempfile::tempdir().unwrap();
+        let cw = dir.path().join(".context-window.json");
+        let paths = paths_with_context_window(&cw);
+        write_ctx(&cw, "other-session", 90.0, 1_000_000);
+        write_ctx(&paths.context_window_file("mine"), "mine", 20.0, 1_000_000);
+        let transcript = write_transcript(dir.path(), 100);
+
+        let (ratio, source) =
+            get_usage_ratio(&paths, "mine", transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "tokens");
+        assert!(
+            (ratio - 0.20).abs() < 1e-9,
+            "read a neighbor's usage: {ratio}"
+        );
+    }
+
+    #[test]
+    fn shared_file_rejected_on_session_mismatch() {
+        // #19: no per-session file; shared file belongs to another session at 99%.
+        // Must NOT adopt it (not even its window size) — fall through to filesize.
+        let dir = tempfile::tempdir().unwrap();
+        let cw = dir.path().join(".context-window.json");
+        let paths = paths_with_context_window(&cw);
+        write_ctx(&cw, "other-session", 99.0, 1_000_000);
+        let transcript = write_transcript(dir.path(), 400_000); // 10% of 4M config
+
+        let (ratio, source) =
+            get_usage_ratio(&paths, "mine", transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "filesize", "adopted a mismatched session's data");
+        assert!(
+            (ratio - 0.10).abs() < 1e-6,
+            "expected filesize 0.10, got {ratio}"
+        );
+    }
+
+    #[test]
+    fn shared_file_accepted_on_session_match() {
+        // Mixed-version deployment: no per-session file, shared file is ours → trust it.
+        let dir = tempfile::tempdir().unwrap();
+        let cw = dir.path().join(".context-window.json");
+        let paths = paths_with_context_window(&cw);
+        write_ctx(&cw, "mine", 30.0, 1_000_000);
+        let transcript = write_transcript(dir.path(), 100);
+
+        let (ratio, source) =
+            get_usage_ratio(&paths, "mine", transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "tokens");
+        assert!((ratio - 0.30).abs() < 1e-9);
+    }
+
     #[test]
     fn fresh_token_percentage_wins() {
         let dir = tempfile::tempdir().unwrap();
@@ -154,7 +241,7 @@ mod tests {
         let paths = paths_with_context_window(&cw);
         let transcript = write_transcript(dir.path(), 1_000_000);
 
-        let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 800_000);
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 800_000);
         assert_eq!(source, "tokens");
         assert!((ratio - 0.42).abs() < 1e-9);
     }
@@ -174,7 +261,7 @@ mod tests {
         // 800K-char transcript: 20% of the real 4M-char window, NOT ~100% of stale config.
         let transcript = write_transcript(dir.path(), 800_000);
 
-        let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 800_000);
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 800_000);
         assert_eq!(source, "filesize_window");
         assert!((ratio - 0.20).abs() < 1e-6, "expected ~0.20, got {ratio}");
     }
@@ -193,7 +280,7 @@ mod tests {
         let paths = paths_with_context_window(&cw);
         let transcript = write_transcript(dir.path(), 5_000_000); // would be >100% via filesize
 
-        let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 4_000_000);
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
         assert_eq!(source, "tokens_stale");
         assert!((ratio - 0.30).abs() < 1e-9, "expected 0.30, got {ratio}");
     }
@@ -205,7 +292,7 @@ mod tests {
         let paths = paths_with_context_window(&cw);
         let transcript = write_transcript(dir.path(), 2_000_000);
 
-        let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 4_000_000);
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
         assert_eq!(source, "filesize");
         assert!((ratio - 0.5).abs() < 1e-6, "expected 0.5, got {ratio}");
     }
@@ -217,7 +304,7 @@ mod tests {
         let paths = paths_with_context_window(&cw);
         let transcript = write_transcript(dir.path(), 10_000_000);
 
-        let (ratio, _) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 4_000_000);
+        let (ratio, _) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
         assert_eq!(ratio, 1.0);
     }
 
@@ -227,7 +314,7 @@ mod tests {
         let cw = dir.path().join(".context-window.json"); // not created
         let paths = paths_with_context_window(&cw);
 
-        let (ratio, source) = get_usage_ratio(&paths, "", 4_000_000);
+        let (ratio, source) = get_usage_ratio(&paths, "", "", 4_000_000);
         assert_eq!(source, "none");
         assert_eq!(ratio, 0.0);
     }
@@ -245,7 +332,7 @@ mod tests {
         let paths = paths_with_context_window(&cw);
         let transcript = write_transcript(dir.path(), 100);
 
-        let (ratio, source) = get_usage_ratio(&paths, transcript.to_str().unwrap(), 800_000);
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 800_000);
         assert_eq!(source, "tokens");
         assert!((ratio - 0.55).abs() < 1e-9);
     }

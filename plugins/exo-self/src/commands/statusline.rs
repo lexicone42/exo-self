@@ -265,6 +265,16 @@ fn write_context_window_json(
         "session_id": session_id,
         "updated_at": now
     });
+    let body = serde_json::to_string(&json).unwrap_or_default();
 
-    let _ = std::fs::write(path, serde_json::to_string(&json).unwrap_or_default());
+    // Per-session file first — the path is the session validation (#19). The legacy
+    // shared path is still written for mixed-version deployments; readers only trust
+    // it when its embedded session_id matches theirs.
+    if !session_id.is_empty() {
+        let per_session =
+            format!("{home}/.claude/exo-self/sessions/context-window-{session_id}.json");
+        let _ = std::fs::create_dir_all(format!("{home}/.claude/exo-self/sessions"));
+        let _ = std::fs::write(per_session, &body);
+    }
+    let _ = std::fs::write(path, &body);
 }

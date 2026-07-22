@@ -42,6 +42,14 @@ impl ExoPaths {
         self.sessions_dir.join(format!("state-{session_id}.json"))
     }
 
+    /// Per-session context-window file. The path itself is the session validation:
+    /// reading your own file cannot return a concurrent session's usage (issue #19 —
+    /// the shared .context-window.json let whichever session wrote last win).
+    pub fn context_window_file(&self, session_id: &str) -> PathBuf {
+        self.sessions_dir
+            .join(format!("context-window-{session_id}.json"))
+    }
+
     pub fn handoff_file(&self, session_id: &str) -> PathBuf {
         self.handoffs_dir.join(format!("{session_id}.md"))
     }

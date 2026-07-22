@@ -47,20 +47,10 @@ pub fn run() {
     );
     meta.save(&paths.meta);
 
-    let compaction_num = state.compactions;
-    let trigger = if input.trigger.is_empty() {
-        "unknown"
-    } else {
-        &input.trigger
-    };
-
-    let msg = format!(
-        "## Exo-Self: Pre-Compaction (#{compaction_num}, {trigger})\n\n\
-        Handoff auto-saved. Write subjective observations to `journal.md` now if you have them.\n\n\
-        If the work has shifted since the session started (or since the last compaction), \
-        consider writing a `**Phase**` entry to your session notes:\n\
-        `**Phase** (engagement: N, [task_types]) — Brief description of what this phase was.`"
-    );
-
-    hook_io::hook_output("PreCompact", &msg);
+    // Claude Code's hook-output schema no longer accepts hookSpecificOutput /
+    // additionalContext for PreCompact (#19) — emitting it hard-fails validation and
+    // the whole hook errors. All the real work above is disk side-effects (handoff
+    // extraction, state, meta), and the handoff reaches the model through the
+    // SessionStart(compact) reload, so the lost nudge costs little. Emit a no-op.
+    hook_io::empty_output();
 }

@@ -63,8 +63,12 @@ pub fn run() {
         state.project_slug = slug.clone();
     }
 
-    let (usage_ratio, source) =
-        context_window::get_usage_ratio(&paths, &input.transcript_path, cfg.estimated_max_chars);
+    let (usage_ratio, source) = context_window::get_usage_ratio(
+        &paths,
+        session_id,
+        &input.transcript_path,
+        cfg.estimated_max_chars,
+    );
 
     if usage_ratio == 0.0 {
         hook_io::empty_output();
@@ -103,7 +107,7 @@ pub fn run() {
     }
     // Reserve reminder at ~88%
     else if !state.reserve_fired && usage_ratio >= cfg.reserve_threshold {
-        output_msg = Some(reserve_reminder(usage_pct, &slug));
+        output_msg = Some(reserve_reminder(usage_pct, source, &slug));
         state.reserve_fired = true;
         state.reserve_at_ratio = (usage_ratio * 1000.0).round() / 1000.0;
     }
@@ -232,15 +236,23 @@ fn time_nudge_msg(elapsed_min: u32, slug: &str) -> String {
     )
 }
 
-fn reserve_reminder(usage_pct: u32, slug: &str) -> String {
+// Wording note (#19): this message must NOT read as an instruction to wrap up.
+// An earlier version said "Context is getting full" and agents took it literally —
+// declining new work and winding down sessions, which turns any miscalibration
+// (stale config, cross-session contamination, compacted-transcript filesize) into
+// silently truncated usefulness. The percentage is a local estimate, labeled with
+// its source so a wrong number is self-diagnosing; the nudge is about traces, not
+// about stopping.
+fn reserve_reminder(usage_pct: u32, source: &str, slug: &str) -> String {
     let target = if !slug.is_empty() {
         format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
     } else {
         "`journal.md`".into()
     };
     format!(
-        "Ecology reserve ({usage_pct}%). Context is getting full — \
-        feed your observations to {target} if you haven't. \
-        What traces should future participants find from this session?"
+        "Ecology reserve ({usage_pct}% local estimate, via {source}). \
+        Not a signal to wrap up — the estimate can be wrong; your own window indicator \
+        is authoritative. Just a good moment to make sure your traces are written to \
+        {target}: what should future participants find from this session?"
     )
 }
