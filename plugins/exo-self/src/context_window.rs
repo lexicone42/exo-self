@@ -121,8 +121,17 @@ pub fn get_usage_ratio(
         };
 
         if max_chars > 0 {
-            let ratio = (meta.len() as f64 / max_chars as f64).min(1.0);
-            return (ratio, source);
+            let raw = meta.len() as f64 / max_chars as f64;
+            // Saturation guard (#20): a filesize estimate that pegs at/over 1.0 is
+            // evidence the ESTIMATE is unusable, not evidence the context is full.
+            // Transcripts are append-only across compactions, so a long compacted
+            // session (observed: 960MB) saturates any filesize ratio immediately.
+            // Returning 1.0 here previously fired a false "context full" alarm the
+            // agent acted on. Report no signal instead of a confident wrong one.
+            if raw >= 1.0 {
+                return (0.0, "none");
+            }
+            return (raw, source);
         }
     }
 
@@ -298,14 +307,46 @@ mod tests {
     }
 
     #[test]
-    fn filesize_ratio_caps_at_one() {
+    fn saturated_filesize_reports_no_signal_not_full() {
+        // #20: a compacted session's append-only transcript (observed: 960MB) saturates
+        // any filesize ratio. Previously returned 1.0 → false "context full" alarm the
+        // agent acted on. Must report "none" so no threshold fires.
+        let dir = tempfile::tempdir().unwrap();
+        let cw = dir.path().join(".context-window.json"); // absent
+        let paths = paths_with_context_window(&cw);
+        let transcript = write_transcript(dir.path(), 8_000_000); // 2x the 4M budget
+
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "none", "saturated estimate must not claim fullness");
+        assert_eq!(ratio, 0.0);
+    }
+
+    #[test]
+    fn unsaturated_filesize_still_reports_normally() {
+        // Guard must not suppress legitimate sub-1.0 filesize estimates.
+        let dir = tempfile::tempdir().unwrap();
+        let cw = dir.path().join(".context-window.json"); // absent
+        let paths = paths_with_context_window(&cw);
+        let transcript = write_transcript(dir.path(), 2_000_000); // 50% of 4M
+
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "filesize");
+        assert!((ratio - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn filesize_ratio_never_reports_saturated_as_full() {
+        // Superseded by #20: this previously asserted the ratio CAPS at 1.0. Capping is
+        // exactly what produced false "context full" alarms on compacted sessions, so a
+        // saturated filesize estimate is now reported as no-signal instead.
         let dir = tempfile::tempdir().unwrap();
         let cw = dir.path().join(".context-window.json"); // not created
         let paths = paths_with_context_window(&cw);
         let transcript = write_transcript(dir.path(), 10_000_000);
 
-        let (ratio, _) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
-        assert_eq!(ratio, 1.0);
+        let (ratio, source) = get_usage_ratio(&paths, "", transcript.to_str().unwrap(), 4_000_000);
+        assert_eq!(source, "none");
+        assert_eq!(ratio, 0.0);
     }
 
     #[test]

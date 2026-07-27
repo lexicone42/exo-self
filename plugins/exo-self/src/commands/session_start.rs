@@ -392,6 +392,16 @@ pub fn run() {
         sections.push(tools_section);
     }
 
+    // Self-check: is the running binary older than the newest installed plugin build?
+    // (#20) Hook handlers exec a single shared ~/.claude/bin/exo-self binary, so a
+    // marketplace update alone does NOT replace it — setup.sh must run. A session can
+    // therefore execute logic predating shipped fixes (observed: false "context full"
+    // alarms from a build older than the token-first ratio logic). Surface it rather
+    // than let a stale build silently misreport.
+    if let Some(warning) = stale_binary_warning() {
+        sections.push(warning);
+    }
+
     let context = sections.join("\n\n");
     hook_io::hook_output("SessionStart", &context);
 }
@@ -565,6 +575,59 @@ fn load_and_consume_handoff(paths: &ExoPaths) -> String {
 
 /// Discover tools in ~/.claude/bin/ and build a context section describing them.
 /// Each tool is expected to support `--help`; we capture its description line.
+/// Warn when the deployed binary predates the newest installed plugin build.
+///
+/// Hook handlers all exec one shared `~/.claude/bin/exo-self[-platform]`. Updating the
+/// plugin refreshes the cached *source* but does not rebuild that binary — only
+/// `setup.sh` does. The gap is invisible and long-lived, and it means shipped fixes
+/// don't apply to exactly the long sessions that need them (#20). Compares mtimes;
+/// returns None when everything is current or the paths can't be read.
+fn stale_binary_warning() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let bin_dir = std::path::PathBuf::from(&home).join(".claude/bin");
+    // Match _common.sh resolution: platform-suffixed first, then unsuffixed.
+    let suffix = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => "-linux-x64",
+        ("linux", "aarch64") => "-linux-arm64",
+        _ => "",
+    };
+    let bin = [
+        bin_dir.join(format!("exo-self{suffix}")),
+        bin_dir.join("exo-self"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())?;
+    let bin_mtime = std::fs::metadata(&bin).and_then(|m| m.modified()).ok()?;
+
+    // Newest installed plugin build (cache dirs are per-commit).
+    let cache = std::path::PathBuf::from(&home).join(".claude/plugins/cache/exo-self/exo-self");
+    let newest = std::fs::read_dir(&cache)
+        .ok()?
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let m = std::fs::metadata(e.path())
+                .and_then(|m| m.modified())
+                .ok()?;
+            Some((m, e.file_name().to_string_lossy().into_owned()))
+        })
+        .max_by_key(|(m, _)| *m)?;
+
+    // Allow a small grace window; only flag a clearly older binary.
+    if newest.0 > bin_mtime + std::time::Duration::from_secs(300) {
+        Some(format!(
+            "**Plugin binary may be stale** — the running `exo-self` binary predates the \
+             newest installed build (`{}`). A marketplace update refreshes plugin source but \
+             does NOT rebuild the binary; run that build's `setup.sh` to deploy it. Until then \
+             this session runs older logic, so ecology signals (including context-usage \
+             estimates) may not reflect shipped fixes.",
+            newest.1
+        ))
+    } else {
+        None
+    }
+}
+
 fn discover_workshop_tools() -> String {
     let home = match std::env::var("HOME") {
         Ok(h) => h,

@@ -93,7 +93,7 @@ pub fn run() {
     // Check-in at ~75% — lighter touch if already reflecting
     else if !state.checkin_fired && usage_ratio >= cfg.checkin_threshold {
         if !already_reflecting {
-            output_msg = Some(checkin_survey(usage_pct, &slug, &state));
+            output_msg = Some(checkin_survey(usage_pct, source, &slug, &state));
         }
         state.checkin_fired = true;
         state.checkin_fired_at = state::now();
@@ -196,7 +196,7 @@ fn nudge_msg(state: &SessionState, paths: &ExoPaths) -> String {
     }
 }
 
-fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
+fn checkin_survey(usage_pct: u32, source: &str, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
         format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
     } else {
@@ -213,8 +213,13 @@ fn checkin_survey(usage_pct: u32, slug: &str, state: &SessionState) -> String {
         _ => String::new(),
     };
 
+    // The prose must never contradict the number it interpolates (#20): this line
+    // hardcoded "Plenty of room left" and so emitted "check-in (92%). Plenty of room
+    // left." moments before a "95%. Context is getting full." A rising number with
+    // opposite verdicts is what made the signal incoherent. State the number and its
+    // source; let the agent judge.
     format!(
-        "Ecology check-in ({usage_pct}%){signal_note}. Plenty of room left. \
+        "Ecology check-in ({usage_pct}% local estimate, via {source}){signal_note}. \
         If anything's worth feeding into the ecology — a thought, a surprise, \
         a crack in an assumption — write to {target}. \
         Frontmatter: `engagement` (1-5), `task_types`."
