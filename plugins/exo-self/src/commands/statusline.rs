@@ -110,7 +110,14 @@ pub fn run() {
     }
 
     // Write context data to shared file for exo-self hooks
-    write_context_window_json(session_id, used_tokens, free_tokens, usage_pct, &input);
+    write_context_window_json(
+        session_id,
+        used_tokens,
+        free_tokens,
+        usage_pct,
+        &model,
+        &input,
+    );
 
     // Output
     println!("{line1}");
@@ -233,6 +240,7 @@ fn write_context_window_json(
     used_tokens: u64,
     free_tokens: u64,
     usage_pct: u64,
+    model: &str,
     input: &Value,
 ) {
     let home = std::env::var("HOME").unwrap_or_default();
@@ -263,6 +271,9 @@ fn write_context_window_json(
         "free_tokens": free_tokens,
         "usage_pct": usage_pct,
         "session_id": session_id,
+        // Authoritative serving model from Claude Code. A model's own belief about
+        // which model it is can be stale; this is what actually answered.
+        "model": model,
         "updated_at": now
     });
     let body = serde_json::to_string(&json).unwrap_or_default();

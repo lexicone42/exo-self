@@ -153,6 +153,35 @@ pub fn run() {
         state.effort = input.effort.clone();
     }
 
+    // Serving-model change notice. A model's self-report comes from its system prompt,
+    // which can be stale: on 2026-07-27 a system prompt claimed Fable 5 for over an hour
+    // after the transcript showed claude-opus-5 serving, and four session notes were
+    // written with false `model:` provenance as a result. The statusline receives the
+    // authoritative model from Claude Code, so surface it — but only when it CHANGES,
+    // to stay quiet in the common case.
+    if let Some(serving) = context_window::serving_model(&paths, session_id)
+        && state.serving_model != serving
+    {
+        let previous = std::mem::replace(&mut state.serving_model, serving.clone());
+        let notice = if previous.is_empty() {
+            format!(
+                "Serving model (authoritative, from Claude Code): **{serving}**. \
+                 Use this for the `model:` frontmatter in session notes — your own sense \
+                 of which model you are can be stale."
+            )
+        } else {
+            format!(
+                "**Serving model changed**: {previous} → **{serving}** (authoritative, from \
+                 Claude Code). Mid-session model switches are silent; use the new value for \
+                 `model:` frontmatter from here on."
+            )
+        };
+        output_msg = Some(match output_msg {
+            Some(existing) => format!("{notice}\n\n{existing}"),
+            None => notice,
+        });
+    }
+
     state.save(&paths);
 
     if let Some(msg) = output_msg {

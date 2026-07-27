@@ -14,6 +14,27 @@ pub struct ContextWindow {
     pub usage_pct: u64,
     pub session_id: String,
     pub updated_at: f64,
+    /// Serving model, as reported by Claude Code to the statusline. Authoritative —
+    /// unlike a model's self-report, which can be stale (see the 2026-07-27 note: a
+    /// system prompt claimed Fable 5 while the transcript showed claude-opus-5 serving).
+    pub model: String,
+}
+
+/// The serving model for a session, from the statusline-written JSON.
+/// Returns None when unavailable or when the record belongs to another session.
+pub fn serving_model(paths: &ExoPaths, session_id: &str) -> Option<String> {
+    let read = |p: &std::path::Path| {
+        std::fs::read_to_string(p)
+            .ok()
+            .and_then(|d| serde_json::from_str::<ContextWindow>(&d).ok())
+    };
+    let ctx = if session_id.is_empty() {
+        read(&paths.context_window)
+    } else {
+        read(&paths.context_window_file(session_id))
+            .or_else(|| read(&paths.context_window).filter(|c| c.session_id == session_id))
+    }?;
+    (!ctx.model.is_empty()).then_some(ctx.model)
 }
 
 /// Rough chars-per-token ratio for English/code. Matches the codebase's own implied

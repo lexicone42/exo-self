@@ -57,6 +57,11 @@ pub struct SessionState {
     // Reasoning-effort level captured from hook input when present (e.g. "xhigh").
     // Empty when the host doesn't supply it — an additive welfare/intensity signal.
     pub effort: String,
+
+    // Last serving model observed from the statusline (authoritative). Used to detect
+    // mid-session model changes, which otherwise happen silently and corrupt the
+    // self-reported `model:` provenance in session notes.
+    pub serving_model: String,
 }
 
 impl Default for SessionState {
@@ -93,6 +98,7 @@ impl Default for SessionState {
             scouted: false,
             time_nudge_count: 0,
             effort: String::new(),
+            serving_model: String::new(),
         }
     }
 }
