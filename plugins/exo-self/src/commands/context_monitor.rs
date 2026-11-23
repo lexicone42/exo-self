@@ -130,6 +130,17 @@ pub fn run() {
         }
     }
 
+    // Digest suggestion: once per session, attached to whichever reflective pause
+    // comes first (#24). Checked only when a pause message is going out.
+    if let Some(msg) = output_msg.as_mut()
+        && !state.digest_hint_fired
+        && let Some(hint) = project::digest_hint(project::digest_state(&paths, &slug))
+    {
+        state.digest_hint_fired = true;
+        msg.push_str("\n\n");
+        msg.push_str(&hint);
+    }
+
     // Effort-signal spike: capture reasoning effort if the host supplies it on this
     // (UserPromptSubmit) event. Graceful — empty input.effort leaves state untouched.
     if !input.effort.is_empty() {

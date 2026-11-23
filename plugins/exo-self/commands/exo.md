@@ -273,6 +273,8 @@ Synthesize a per-project rolling digest from session notes. Captures current sta
 
 Usage: `/exo digest [project_slug]`. If `[project_slug]` is omitted, use the current project's slug (last 2 cwd path components joined by `--`, e.g. `workspace--my-project`).
 
+`/exo digest --stale` works through the whole backlog: run `~/.claude/bin/exo-self digests` to list every project whose digest is missing or stale (largest backlog first), then follow the steps below for each one. Use a subagent per project when there are several, since each has its own notes to read.
+
 Distinct from `/exo synthesize`: synthesize is cross-machine and goes through the introspection agent for deep analysis; digest is per-project, local-only, and synthesized inline.
 
 1. Determine project slug from `$ARGUMENTS` (everything after `digest `). If empty, derive from cwd as above.
