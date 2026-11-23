@@ -646,8 +646,9 @@ pub fn run() {
 
     meta.save(&paths.meta);
 
-    // Extract handoff at session-end if pre_compact didn't already create one.
-    // This covers the "/clear without compaction" continuity gap.
+    // Extract a handoff at every session end. It used to be written only when the
+    // session had none, so a session's handoff froze at its first exit or
+    // compaction and was never refreshed by later exits.
     let effective_sid = if session_id.is_empty() {
         &state.session_id
     } else {
@@ -656,7 +657,6 @@ pub fn run() {
     if !input.transcript_path.is_empty()
         && std::fs::metadata(&input.transcript_path).is_ok()
         && !effective_sid.is_empty()
-        && !paths.handoff_file(effective_sid).exists()
     {
         let content = crate::commands::extract_handoff::extract(&input.transcript_path, 3000);
         if !content.is_empty() {
