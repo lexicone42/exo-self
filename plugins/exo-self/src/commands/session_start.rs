@@ -132,6 +132,9 @@ pub fn run() {
     let exo_root = format!("{home}/.claude/exo-self");
 
     let marker_guide = marker_guide();
+    let serving_model = crate::context_window::serving_model(&paths, &session_id);
+    let frontmatter_template =
+        project::frontmatter_template(&session_id, &project_slug, serving_model.as_deref());
     sections.push(format!(
         "## Exo-Self\n\n\
         You are joining an ongoing cognitive ecology. Previous participants left traces — \
@@ -143,10 +146,9 @@ pub fn run() {
         If something shifts — curiosity, frustration, surprise — name it in the moment.\n\n\
         Write subjective observations (not technical facts) to:\n\
         - `{exo_root}/per-project/{project_slug}/{session_notes_file}` — **preferred** for this session. \
-        Create with YAML frontmatter: `session_id`, `date`, `project`, `model`, `engagement` (1-5), \
-        `engagement_mode`, `task_types` (e.g. [discussion, debugging, feature-dev, design, refactoring]). \
-        Write prose below the closing `---`.\n\
-        - `engagement_mode`: code, discussion, exploration, synthesis, design, debugging, ops, review\n\
+        Start every note file, whatever you name it, with this frontmatter and write prose \
+        below the closing `---`. Copy the first four lines as they are:\n\n\
+        {frontmatter_template}\n\n\
         {marker_guide}\n\
         - When noting communication quality, use Gricean terms: \
         Quantity (informative enough without excess?), Quality (unsupported claims?), \

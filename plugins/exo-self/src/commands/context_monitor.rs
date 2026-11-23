@@ -125,7 +125,7 @@ pub fn run() {
             TimeCheckpoint::Skip(index) => state.time_nudge_count = index,
             TimeCheckpoint::Fire(index) => {
                 state.time_nudge_count = index;
-                output_msg = Some(time_nudge_msg(elapsed_min, &slug));
+                output_msg = Some(time_nudge_msg(elapsed_min, &slug, &state));
             }
         }
     }
@@ -292,11 +292,23 @@ fn checkin_survey(usage_pct: u32, source: &str, slug: &str, state: &SessionState
         "Ecology check-in ({usage_pct}% local estimate, via {source}){signal_note}. \
         If anything's worth feeding into the ecology — a thought, a surprise, \
         a crack in an assumption — write to {target}. \
-        Frontmatter: `engagement` (1-5), `task_types`."
+        Frontmatter: `engagement` (1-5), `task_types`{}.",
+        identity_reminder(state, slug)
     )
 }
 
-fn time_nudge_msg(elapsed_min: u32, slug: &str) -> String {
+/// The identity fields a new note file needs, with their values (#23).
+fn identity_reminder(state: &SessionState, slug: &str) -> String {
+    let model = (!state.serving_model.is_empty()).then_some(state.serving_model.as_str());
+    let lines = project::identity_lines(&state.session_id, slug, model);
+    if lines.is_empty() {
+        String::new()
+    } else {
+        format!("; a new note file also needs {lines}")
+    }
+}
+
+fn time_nudge_msg(elapsed_min: u32, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
         format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
     } else {
@@ -313,7 +325,8 @@ fn time_nudge_msg(elapsed_min: u32, slug: &str) -> String {
         "Ecology time checkpoint ({time_str} in session, plenty of context left). \
         Good moment to notice what's here — anything surprising, worth remembering, \
         or worth leaving for future participants? Write to {target}. \
-        Frontmatter: `engagement` (1-5), `task_types`."
+        Frontmatter: `engagement` (1-5), `task_types`{}.",
+        identity_reminder(state, slug)
     )
 }
 

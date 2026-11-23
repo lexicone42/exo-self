@@ -549,6 +549,54 @@ pub fn newest_note_mtime(paths: &ExoPaths, slug: &str) -> Option<f64> {
         })
 }
 
+/// The frontmatter a new session note should start with, filled in with what
+/// the host knows (#23).
+///
+/// Sessions were told which fields to write but not their values, and often
+/// name their own note files, so many notes carry no session id, project or
+/// model, or a model spelled from memory. Handing over the exact lines makes
+/// the identity fields a copy, not a recollection.
+pub fn frontmatter_template(session_id: &str, project_slug: &str, model: Option<&str>) -> String {
+    let date = chrono::Local::now().format("%Y-%m-%d");
+    let model_line = match model {
+        Some(m) if !m.is_empty() => format!("model: \"{}\"", yaml_escape(m)),
+        _ => "model: \"\"          # the serving model; a notice names it on your first prompt"
+            .to_string(),
+    };
+    format!(
+        "```yaml\n---\n\
+        session_id: \"{}\"\n\
+        date: \"{date}\"\n\
+        project: \"{}\"\n\
+        {model_line}\n\
+        engagement:         # 1-5\n\
+        engagement_mode:    # code, discussion, exploration, synthesis, design, debugging, ops, review\n\
+        task_types: []      # e.g. [discussion, debugging, feature-dev, design, refactoring]\n\
+        ---\n```",
+        yaml_escape(session_id),
+        yaml_escape(project_slug),
+    )
+}
+
+/// The identity lines alone, for a checkpoint message.
+pub fn identity_lines(session_id: &str, project_slug: &str, model: Option<&str>) -> String {
+    let mut parts = Vec::new();
+    if !session_id.is_empty() {
+        parts.push(format!("`session_id: \"{}\"`", yaml_escape(session_id)));
+    }
+    if !project_slug.is_empty() {
+        parts.push(format!("`project: \"{}\"`", yaml_escape(project_slug)));
+    }
+    if let Some(m) = model.filter(|m| !m.is_empty()) {
+        parts.push(format!("`model: \"{}\"`", yaml_escape(m)));
+    }
+    parts.join(", ")
+}
+
+fn yaml_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 pub fn file_modified_after(path: &std::path::Path, after: f64) -> bool {
     std::fs::metadata(path)
         .ok()
@@ -840,6 +888,52 @@ mod tests {
         assert!(missing.contains("/exo digest"));
         let stale = digest_hint(DigestState::Stale { new_notes: 7 }).unwrap();
         assert!(stale.contains("7 session notes behind"));
+    }
+
+    #[test]
+    fn frontmatter_template_carries_the_values_and_parses_as_frontmatter() {
+        let block = frontmatter_template(
+            "c03fe411-2d1e-4f0a-9c11-000000000000",
+            "gominimal--build-servers",
+            Some("Fable 5.2"),
+        );
+        let note = block
+            .trim_start_matches("```yaml\n")
+            .trim_end_matches("```")
+            .to_string()
+            + "Prose.\n";
+        let (fm, prose) = markdown::parse_frontmatter(&note);
+        let get = |k: &str| fm.get(k).and_then(|v| v.as_str()).map(str::to_string);
+        assert_eq!(
+            get("session_id").as_deref(),
+            Some("c03fe411-2d1e-4f0a-9c11-000000000000")
+        );
+        assert_eq!(get("project").as_deref(), Some("gominimal--build-servers"));
+        assert_eq!(get("model").as_deref(), Some("Fable 5.2"));
+        assert_eq!(get("date").map(|d| d.len()), Some(10));
+        assert_eq!(prose.trim(), "Prose.");
+    }
+
+    #[test]
+    fn frontmatter_template_without_a_known_model_leaves_it_empty_not_guessed() {
+        let block = frontmatter_template("s", "p", None);
+        assert!(block.contains("model: \"\""));
+        let note = block
+            .trim_start_matches("```yaml\n")
+            .trim_end_matches("```")
+            .to_string();
+        let (fm, _) = markdown::parse_frontmatter(&note);
+        assert_eq!(fm.get("model").and_then(|v| v.as_str()), Some(""));
+    }
+
+    #[test]
+    fn identity_lines_omit_what_is_unknown() {
+        assert_eq!(identity_lines("", "", None), "");
+        assert_eq!(
+            identity_lines("s1", "p", Some("Opus 5.5")),
+            "`session_id: \"s1\"`, `project: \"p\"`, `model: \"Opus 5.5\"`"
+        );
+        assert_eq!(identity_lines("s1", "", Some("")), "`session_id: \"s1\"`");
     }
 
     /// Build a minimal ExoPaths anchored at `root`. Only `per_project_dir` matters
