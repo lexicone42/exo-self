@@ -627,7 +627,12 @@ pub fn run() {
         if !content.is_empty() {
             let _ = std::fs::create_dir_all(&paths.handoffs_dir);
             let _ = std::fs::write(paths.handoff_file(effective_sid), &content);
-            let _ = std::fs::write(paths.handoffs_dir.join("latest.md"), &content);
+            let project_slug = if state.project_slug.is_empty() {
+                project::slug_from_input(&input.cwd)
+            } else {
+                state.project_slug.clone()
+            };
+            crate::handoff::write_latest(&paths, effective_sid, &project_slug, &content);
         }
     }
 

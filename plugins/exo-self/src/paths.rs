@@ -20,7 +20,11 @@ pub struct ExoPaths {
 impl ExoPaths {
     pub fn new() -> Self {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-        let root = PathBuf::from(&home).join(".claude/exo-self");
+        Self::at(PathBuf::from(&home).join(".claude/exo-self"))
+    }
+
+    /// All paths anchored at `root`. `new()` uses `~/.claude/exo-self`; tests pass a tempdir.
+    pub fn at(root: PathBuf) -> Self {
         Self {
             journal: root.join("journal.md"),
             interests: root.join("interests.md"),

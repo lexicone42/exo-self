@@ -98,38 +98,27 @@ pub fn run() {
     hook_io::hook_output("SessionStart", &context);
 }
 
+/// This session's own handoff, written by its PreCompact hook.
+///
+/// `latest.md` is read only when the hook input carried no session id, which is
+/// the one case where PreCompact had nowhere else to write. With a session id,
+/// falling back to `latest.md` would show whichever session on the machine
+/// compacted last (#28).
 fn load_handoff(paths: &ExoPaths, session_id: &str) -> String {
-    // Try session-specific handoff first
-    if !session_id.is_empty() {
-        let path = paths.handoff_file(session_id);
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            let trimmed = content.trim();
-            if !trimmed.is_empty() {
-                return if trimmed.len() > 5000 {
-                    {
-                        let end = crate::markdown::safe_truncate(trimmed, 5000);
-                        format!("{}...", &trimmed[..end])
-                    }
-                } else {
-                    trimmed.to_string()
-                };
-            }
-        }
-    }
-
-    // Fallback to latest
-    let latest = paths.handoffs_dir.join("latest.md");
-    if let Ok(content) = std::fs::read_to_string(&latest) {
-        let trimmed = content.trim();
-        if trimmed.len() > 5000 {
-            {
-                let end = crate::markdown::safe_truncate(trimmed, 5000);
-                format!("{}...", &trimmed[..end])
-            }
-        } else {
-            trimmed.to_string()
-        }
+    let path = if session_id.is_empty() {
+        paths.handoffs_dir.join("latest.md")
     } else {
-        String::new()
+        paths.handoff_file(session_id)
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return String::new();
+    };
+    let (_, body) = crate::handoff::split_origin(&content);
+    let trimmed = body.trim();
+    if trimmed.len() > 5000 {
+        let end = crate::markdown::safe_truncate(trimmed, 5000);
+        format!("{}...", &trimmed[..end])
+    } else {
+        trimmed.to_string()
     }
 }
