@@ -104,6 +104,41 @@ pub fn run() {
         }
     }
 
+    // Everything else the session wrote. Sessions name their own note files, so
+    // markers in those never reached meta.json: only the suggested path was read.
+    let harvest_sid = if session_id.is_empty() {
+        state.session_id.as_str()
+    } else {
+        session_id.as_str()
+    };
+    let other_prose = project::other_session_prose(
+        &paths,
+        &state.project_slug,
+        harvest_sid,
+        session_start,
+        &state.session_notes_path,
+    );
+    let harvest_text = match (prose_content.trim().is_empty(), other_prose.is_empty()) {
+        (_, true) => prose_content.clone(),
+        (true, false) => other_prose,
+        (false, false) => format!("{prose_content}\n\n{other_prose}"),
+    };
+    if harvest_text.len() != prose_content.len() {
+        sparks_found = markdown::extract_sparks(&harvest_text);
+        opinions_found = markdown::extract_opinions(&harvest_text);
+        if !frontmatter.is_empty() {
+            // Counts in the suggested note cover the whole session.
+            frontmatter.insert(
+                "spark_count".into(),
+                serde_yaml::Value::Number((sparks_found.len() as u64).into()),
+            );
+            frontmatter.insert(
+                "opinion_count".into(),
+                serde_yaml::Value::Number((opinions_found.len() as u64).into()),
+            );
+        }
+    }
+
     // Add sparks to meta (deduplicated)
     if !sparks_found.is_empty() {
         let project_slug = &state.project_slug;
@@ -176,8 +211,8 @@ pub fn run() {
     }
 
     // Extract **Friction** items from prose → store as structured frictions
-    let frictions_found = if !prose_content.is_empty() {
-        markdown::extract_frictions(&prose_content)
+    let frictions_found = if !harvest_text.is_empty() {
+        markdown::extract_frictions(&harvest_text)
     } else {
         Vec::new()
     };
@@ -278,8 +313,8 @@ pub fn run() {
     }
 
     // Extract **Change** items from prose → store as lessons
-    let changes_found = if !prose_content.is_empty() {
-        markdown::extract_changes(&prose_content)
+    let changes_found = if !harvest_text.is_empty() {
+        markdown::extract_changes(&harvest_text)
     } else {
         Vec::new()
     };
@@ -318,8 +353,8 @@ pub fn run() {
     }
 
     // Extract **Surprise** items from prose → store as negative stigmergy
-    let surprises_found = if !prose_content.is_empty() {
-        markdown::extract_surprises(&prose_content)
+    let surprises_found = if !harvest_text.is_empty() {
+        markdown::extract_surprises(&harvest_text)
     } else {
         Vec::new()
     };
@@ -358,8 +393,8 @@ pub fn run() {
     }
 
     // Extract **Aversion** items from prose → store as structured aversions
-    let aversions_found = if !prose_content.is_empty() {
-        markdown::extract_aversions(&prose_content)
+    let aversions_found = if !harvest_text.is_empty() {
+        markdown::extract_aversions(&harvest_text)
     } else {
         Vec::new()
     };
