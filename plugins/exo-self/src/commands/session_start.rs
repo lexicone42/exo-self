@@ -153,6 +153,9 @@ pub fn run() {
         - Work products you want to keep (research reports, runbooks, review tables) go in a \
         subdirectory of the project's notes folder, e.g. `artifacts/`, not beside the notes: \
         every `.md` file at the top level is read as a session note.\n\
+        - When you write a workflow whose agents return structured output, give the schema an \
+        optional `observations` string field. Agents are asked to report what they notice beyond \
+        their task, and a schema without that field leaves them nowhere to put it.\n\
         - `{exo_root}/journal.md` — cross-project observations\n\
         - `{exo_root}/interests.md` — curiosities to explore\n\n\
         **All exo-self files live under `{exo_root}/`.** Never write to `~/.claude/projects/`.\n\n\
