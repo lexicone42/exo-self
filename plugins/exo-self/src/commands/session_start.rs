@@ -841,7 +841,10 @@ mod tests {
         assert_eq!(resumed.tool_failures, 4);
         assert_eq!(resumed.task_completions, 9);
         assert_eq!(resumed.compactions, 12);
-        assert_eq!(resumed.session_start, earlier.session_start);
+        // The clock is the original one, not "now". Compared with a tolerance:
+        // a float read back from JSON can differ in its last bit.
+        assert!((resumed.session_start - earlier.session_start).abs() < 0.001);
+        assert!(state::now() - resumed.session_start > 7000.0);
     }
 
     #[test]
