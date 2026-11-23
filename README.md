@@ -87,6 +87,9 @@ Edit `~/.claude/exo-self/config.json`:
 | `max_journal_entries` | `2` | Max recent journal entries loaded |
 | `max_interests_items` | `5` | Max open interest items loaded |
 | `failure_nudge_threshold` | `10` | Tool failures before friction nudge fires |
+| `time_nudge_first_min` | `60` | Minutes into a session before the first time-based checkpoint |
+| `time_nudge_interval_min` | `90` | Minutes between time-based checkpoints; `0` turns repeats off |
+| `checkpoint_cooldown_min` | `30` | Skip a time-based checkpoint when a session note was written this recently; `0` disables |
 
 ## Scouting
 

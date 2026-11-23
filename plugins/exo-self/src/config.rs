@@ -15,6 +15,13 @@ pub struct Config {
     pub max_sparks_display: usize,
     pub failure_nudge_threshold: u32,
     pub merge_plugins: Vec<String>,
+    /// Minutes into a session before the first time-based checkpoint.
+    pub time_nudge_first_min: u32,
+    /// Minutes between time-based checkpoints after the first. 0 turns them off.
+    pub time_nudge_interval_min: u32,
+    /// A time-based checkpoint is skipped when a session note for the project
+    /// was written within this many minutes (#26). 0 disables the cooldown.
+    pub checkpoint_cooldown_min: u32,
 }
 
 impl Default for Config {
@@ -30,6 +37,9 @@ impl Default for Config {
             max_sparks_display: 5,
             failure_nudge_threshold: 10,
             merge_plugins: Vec::new(),
+            time_nudge_first_min: 60,
+            time_nudge_interval_min: 90,
+            checkpoint_cooldown_min: 30,
         }
     }
 }

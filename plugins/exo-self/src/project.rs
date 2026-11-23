@@ -394,6 +394,32 @@ pub fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start:
     false
 }
 
+/// Modification time (Unix seconds) of the most recently written session note
+/// for a project, or None when it has none. `_`-prefixed files are summaries,
+/// not session notes, and are not counted.
+pub fn newest_note_mtime(paths: &ExoPaths, slug: &str) -> Option<f64> {
+    if slug.is_empty() {
+        return None;
+    }
+    let entries = std::fs::read_dir(paths.project_notes_dir(slug)).ok()?;
+    entries
+        .flatten()
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(|n| n.ends_with(".md") && !n.starts_with('_'))
+        })
+        .filter_map(|e| e.metadata().ok()?.modified().ok())
+        .map(|t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64()
+        })
+        .fold(None, |newest: Option<f64>, t| {
+            Some(newest.map_or(t, |n| n.max(t)))
+        })
+}
+
 pub fn file_modified_after(path: &std::path::Path, after: f64) -> bool {
     std::fs::metadata(path)
         .ok()
@@ -538,6 +564,24 @@ mod tests {
             extract_marker_paragraphs(prose),
             "**Opinion: the corpus is the spec.**\n\n**Surprise:** the gate never ran."
         );
+    }
+
+    #[test]
+    fn newest_note_mtime_ignores_summaries_and_missing_projects() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        assert_eq!(newest_note_mtime(&paths, "absent"), None);
+        assert_eq!(newest_note_mtime(&paths, ""), None);
+
+        let notes = paths.project_notes_dir("p");
+        std::fs::create_dir_all(&notes).unwrap();
+        std::fs::write(notes.join("_digest.md"), "summary").unwrap();
+        assert_eq!(newest_note_mtime(&paths, "p"), None);
+
+        // A custom-named note counts: sessions do not always use the suggested filename.
+        std::fs::write(notes.join("2026-11-21-design-first.md"), "note").unwrap();
+        let mtime = newest_note_mtime(&paths, "p").expect("a note exists");
+        assert!((crate::state::now() - mtime).abs() < 60.0);
     }
 
     /// Build a minimal ExoPaths anchored at `root`. Only `per_project_dir` matters
