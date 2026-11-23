@@ -296,7 +296,7 @@ fn extract_marker_paragraphs(prose: &str) -> String {
         if trimmed.is_empty() {
             continue;
         }
-        if trimmed.contains("**Opinion**") || trimmed.contains("**Surprise**") {
+        if markdown::has_marker(trimmed, "Opinion") || markdown::has_marker(trimmed, "Surprise") {
             kept.push(trimmed.to_string());
         }
     }
@@ -525,6 +525,19 @@ mod tests {
         let result = extract_marker_paragraphs(prose);
         let expected = "**Opinion** — Worth keeping.\n\n**Surprise** — Also worth keeping.";
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn extract_marker_paragraphs_keeps_every_marker_shape() {
+        // #22: older notes written as `**Opinion: ...**` or `**Surprise:**`
+        // contributed nothing to tiered loading.
+        let prose = "Plain narrative.\n\n**Opinion: the corpus is the spec.**\n\n\
+            More narrative.\n\n**Surprise:** the gate never ran.\n\n\
+            **Surprises** in the plural are prose.";
+        assert_eq!(
+            extract_marker_paragraphs(prose),
+            "**Opinion: the corpus is the spec.**\n\n**Surprise:** the gate never ran."
+        );
     }
 
     /// Build a minimal ExoPaths anchored at `root`. Only `per_project_dir` matters

@@ -105,55 +105,106 @@ fn extract_after_marker(text: &str, pos: usize) -> Option<String> {
     if entry.is_empty() { None } else { Some(entry) }
 }
 
-/// Generic marker extraction supporting both bold markers (anywhere) and
-/// plain markers (start-of-line only, to avoid false positives in prose).
-fn extract_entries(text: &str, bold_markers: &[&[u8]], plain_marker: Option<&str>) -> Vec<String> {
+/// Byte offsets just past each bold occurrence of marker `name` in `text`,
+/// with what follows the name.
+///
+/// A bold marker is `**Name` where the next character does not continue the
+/// word, so `**Surprise` matches and `**Surprises` does not. Three shapes are
+/// in use in real notes and all are accepted (#22):
+///
+///   * `**Opinion** text` and `**Opinion:** text`: the bold span is the marker alone.
+///   * `**Opinion: a whole sentence.**`: the bold span covers the entry.
+///   * `**Surprise (the good one)** text` and `**Surprise #2:** text`: a
+///     qualifier sits between the name and the end of the bold span.
+///
+/// The last two are recognised only when a colon, dash, comma, parenthesis or
+/// `#` follows the name, so bold phrases that merely start with a marker word
+/// are left alone.
+fn bold_marker_sites(text: &str, name: &str) -> Vec<(usize, MarkerShape)> {
+    let needle = format!("**{name}");
+    let mut sites = Vec::new();
+    let mut from = 0;
+    while let Some(pos) = text[from..].find(&needle) {
+        let after_name = from + pos + needle.len();
+        from = after_name;
+        let rest = &text[after_name..];
+        let Some(next) = rest.chars().next() else {
+            break;
+        };
+        if next.is_alphanumeric() || next == '_' {
+            continue;
+        }
+        if rest.starts_with("**") {
+            sites.push((after_name + 2, MarkerShape::Alone));
+        } else if rest.starts_with(":**") {
+            sites.push((after_name + 3, MarkerShape::Alone));
+        } else if [":", " \u{2014}", " -", " (", ",", " #"]
+            .iter()
+            .any(|q| rest.starts_with(q))
+        {
+            sites.push((after_name, MarkerShape::Spanning));
+        }
+        // Anything else (`**Change log**`, `**Phase 1**`) is ordinary bold text.
+    }
+    sites
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MarkerShape {
+    /// The bold span closed right after the name.
+    Alone,
+    /// The bold span is still open: its closing `**` is inside the entry text.
+    Spanning,
+}
+
+/// True when `text` carries a bold marker `name` in any accepted shape.
+pub fn has_marker(text: &str, name: &str) -> bool {
+    !bold_marker_sites(text, name).is_empty()
+}
+
+/// Marker extraction: bold markers anywhere in the text, plus `Name:` at the
+/// start of a line (start-of-line only, to avoid false positives in prose).
+fn extract_entries(text: &str, name: &str) -> Vec<String> {
     let mut entries = Vec::new();
-    let bytes = text.as_bytes();
 
     // Pass 1: bold markers (can appear anywhere in text)
-    for marker in bold_markers {
-        let mut i = 0;
-        while i < bytes.len() {
-            if let Some(pos) = find_bytes(&bytes[i..], marker) {
-                let abs_pos = i + pos + marker.len();
-                if let Some(entry) = extract_after_marker(text, abs_pos)
-                    && !entries.contains(&entry)
-                {
-                    entries.push(entry);
-                }
-                i = abs_pos;
-            } else {
-                break;
+    for (pos, shape) in bold_marker_sites(text, name) {
+        let Some(mut entry) = extract_after_marker(text, pos) else {
+            continue;
+        };
+        if shape == MarkerShape::Spanning {
+            // Drop the `**` that closes the span the marker opened.
+            if let Some(close) = entry.find("**") {
+                entry.replace_range(close..close + 2, "");
             }
+            entry = entry.trim_start_matches(',').trim().to_string();
+            if entry.is_empty() {
+                continue;
+            }
+        }
+        if !entries.contains(&entry) {
+            entries.push(entry);
         }
     }
 
     // Pass 2: plain marker at start of line (e.g., "Spark: text")
-    if let Some(plain) = plain_marker {
-        // Check start of text
-        if text.starts_with(plain)
-            && let Some(entry) = extract_after_marker(text, plain.len())
+    let plain = format!("{name}:");
+    if text.starts_with(&plain)
+        && let Some(entry) = extract_after_marker(text, plain.len())
+        && !entries.contains(&entry)
+    {
+        entries.push(entry);
+    }
+    let search = format!("\n{plain}");
+    let mut i = 0;
+    while let Some(pos) = text[i..].find(&search) {
+        let abs_pos = i + pos + search.len();
+        if let Some(entry) = extract_after_marker(text, abs_pos)
             && !entries.contains(&entry)
         {
             entries.push(entry);
         }
-        // Check after newlines
-        let search = format!("\n{plain}");
-        let mut i = 0;
-        while i < text.len() {
-            if let Some(pos) = text[i..].find(&search) {
-                let abs_pos = i + pos + search.len();
-                if let Some(entry) = extract_after_marker(text, abs_pos)
-                    && !entries.contains(&entry)
-                {
-                    entries.push(entry);
-                }
-                i = abs_pos;
-            } else {
-                break;
-            }
-        }
+        i = abs_pos;
     }
 
     entries
@@ -162,17 +213,13 @@ fn extract_entries(text: &str, bold_markers: &[&[u8]], plain_marker: Option<&str
 /// Extract **Spark** entries from session notes prose.
 /// Supports: **Spark** — text, **Spark**: text, **Spark:** text, Spark: text (at start of line)
 pub fn extract_sparks(text: &str) -> Vec<String> {
-    extract_entries(text, &[b"**Spark**", b"**Spark:**"], Some("Spark:"))
+    extract_entries(text, "Spark")
 }
 
 /// Extract **Opinion** entries from session notes prose.
 /// Supports: **Opinion** — text, **Opinion**: text, **Opinion:** text, Opinion: text (at start of line)
 pub fn extract_opinions(text: &str) -> Vec<String> {
-    extract_entries(text, &[b"**Opinion**", b"**Opinion:**"], Some("Opinion:"))
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|w| w == needle)
+    extract_entries(text, "Opinion")
 }
 
 /// Parse YAML frontmatter from a markdown file.
@@ -282,7 +329,7 @@ fn format_yaml_line(key: &str, val: &serde_yaml::Value) -> String {
 /// Extract **Change** entries from session notes prose (behavioral lessons).
 /// Supports: **Change** — text, **Change**: text, **Change:** text, Change: text (at start of line)
 pub fn extract_changes(text: &str) -> Vec<String> {
-    extract_entries(text, &[b"**Change**", b"**Change:**"], Some("Change:"))
+    extract_entries(text, "Change")
         .into_iter()
         .filter(|s| {
             let lower = s.to_lowercase();
@@ -300,31 +347,19 @@ pub fn extract_changes(text: &str) -> Vec<String> {
 /// Aversions are functional negative states — experiential, not operational.
 /// Supports: **Aversion** — text, **Aversion**: text, **Aversion:** text, Aversion: text (at start of line)
 pub fn extract_aversions(text: &str) -> Vec<String> {
-    extract_entries(
-        text,
-        &[b"**Aversion**", b"**Aversion:**"],
-        Some("Aversion:"),
-    )
+    extract_entries(text, "Aversion")
 }
 
 /// Extract **Surprise** entries from session notes prose.
 /// Negative stigmergy: traces that warn future participants the map doesn't match the territory.
 pub fn extract_surprises(text: &str) -> Vec<String> {
-    extract_entries(
-        text,
-        &[b"**Surprise**", b"**Surprise:**"],
-        Some("Surprise:"),
-    )
+    extract_entries(text, "Surprise")
 }
 
 /// Extract **Friction** entries from session notes prose.
 /// Supports: **Friction** — text, **Friction**: text, **Friction:** text, Friction: text (at start of line)
 pub fn extract_frictions(text: &str) -> Vec<String> {
-    extract_entries(
-        text,
-        &[b"**Friction**", b"**Friction:**"],
-        Some("Friction:"),
-    )
+    extract_entries(text, "Friction")
 }
 
 /// Infer a friction category from free-text friction description.
@@ -388,7 +423,7 @@ pub struct Phase {
 /// Extract **Phase** entries from session notes prose.
 /// Supports: **Phase** (engagement: 4, [debugging]) — text, **Phase:** text, Phase: text
 pub fn extract_phases(text: &str) -> Vec<String> {
-    extract_entries(text, &[b"**Phase**", b"**Phase:**"], Some("Phase:"))
+    extract_entries(text, "Phase")
 }
 
 /// Parse structured data from a phase entry string.
@@ -776,5 +811,91 @@ mod tests {
         let result = last_journal_entry(content, 500);
         assert!(result.starts_with("## 2026-01-02"));
         assert!(result.contains("Second entry"));
+    }
+    // --- marker shapes (#22) ---
+
+    #[test]
+    fn bold_span_covering_the_whole_sentence_is_extracted() {
+        // The shape the 2026-08-05 minimermetic note used, which was dropped.
+        let text = "**Opinion: three silences were three chances to ask the right question, \
+            and I took the third.** The discipline follows.";
+        assert_eq!(
+            extract_opinions(text),
+            vec![
+                "three silences were three chances to ask the right question, and I took the \
+                 third. The discipline follows."
+            ]
+        );
+    }
+
+    #[test]
+    fn the_shapes_that_already_worked_give_the_same_entries() {
+        for text in [
+            "**Opinion** \u{2014} worth keeping.",
+            "**Opinion**: worth keeping.",
+            "**Opinion:** worth keeping.",
+            "Opinion: worth keeping.",
+            "intro line\nOpinion: worth keeping.",
+        ] {
+            assert_eq!(extract_opinions(text), vec!["worth keeping."], "{text}");
+        }
+    }
+
+    #[test]
+    fn qualified_markers_keep_their_qualifier_and_text() {
+        assert_eq!(
+            extract_surprises("**Surprise (the good one)** \u{2014} it held."),
+            vec!["(the good one) \u{2014} it held."]
+        );
+        assert_eq!(
+            extract_surprises("**Surprise, bigger** \u{2014} nothing was signed."),
+            vec!["bigger \u{2014} nothing was signed."]
+        );
+        assert_eq!(
+            extract_surprises("**Surprise #2:** the cache was cold."),
+            vec!["#2: the cache was cold."]
+        );
+        assert_eq!(
+            extract_surprises("**Surprise \u{2014} the README was a failed read.**"),
+            vec!["the README was a failed read."]
+        );
+    }
+
+    #[test]
+    fn bold_text_that_only_starts_with_a_marker_word_is_not_an_entry() {
+        assert!(extract_surprises("**Surprises** were few.").is_empty());
+        assert!(extract_changes("**Change log** for the release.").is_empty());
+        assert!(extract_phases("**Phase 1** went fine.").is_empty());
+        assert!(extract_frictions("**Friction patterns:** stuck loop (3x)").is_empty());
+        assert!(extract_opinions("**Opinionated** tooling.").is_empty());
+        assert!(!has_marker("**Surprises** were few.", "Surprise"));
+    }
+
+    #[test]
+    fn one_note_mixing_shapes_yields_each_entry_once() {
+        let text = "**Opinion** \u{2014} first.\n\n**Opinion: second.**\n\n\
+            **Opinion:** third.\n\n**Opinion** \u{2014} first.";
+        assert_eq!(extract_opinions(text), vec!["first.", "second.", "third."]);
+    }
+
+    #[test]
+    fn has_marker_sees_every_shape() {
+        for text in [
+            "**Surprise** \u{2014} x",
+            "**Surprise:** x",
+            "**Surprise: x**",
+            "**Surprise, the good kind** x",
+        ] {
+            assert!(has_marker(text, "Surprise"), "{text}");
+        }
+        assert!(!has_marker("Surprise: plain start-of-line", "Surprise"));
+        assert!(!has_marker("no markers here", "Surprise"));
+    }
+
+    #[test]
+    fn a_marker_at_the_very_end_of_the_text_does_not_panic() {
+        assert!(extract_sparks("trailing **Spark").is_empty());
+        assert!(extract_sparks("trailing **Spark**").is_empty());
+        assert!(extract_sparks("**Spark: **").is_empty());
     }
 }
