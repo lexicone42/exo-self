@@ -134,13 +134,46 @@ pub fn load_acked(paths: &ExoPaths) -> BTreeMap<String, Ack> {
         .unwrap_or_default()
 }
 
+fn count_path(paths: &ExoPaths) -> PathBuf {
+    paths.root.join("flags-open-count")
+}
+
 /// Flags nobody has acknowledged.
+///
+/// Also records how many there are, for the status line. The status line is
+/// drawn many times a minute and must not scan every note each time, so it
+/// reads this number, refreshed whenever something does the scan.
 pub fn open(paths: &ExoPaths) -> Vec<Flag> {
     let acked = load_acked(paths);
-    scan(paths)
+    let open: Vec<Flag> = scan(paths)
         .into_iter()
         .filter(|f| !acked.contains_key(&f.id))
-        .collect()
+        .collect();
+    if paths.root.is_dir() {
+        let _ = std::fs::write(count_path(paths), open.len().to_string());
+    }
+    open
+}
+
+/// The open-flag count as of the last scan. 0 when it has never been taken.
+pub fn last_open_count(paths: &ExoPaths) -> usize {
+    std::fs::read_to_string(count_path(paths))
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+/// The status-line marker for open flags: empty when there are none.
+/// This is the one place a flag reaches the user without a session relaying it.
+pub fn statusline_marker(count: usize) -> String {
+    if count == 0 {
+        String::new()
+    } else {
+        format!(
+            " | \x1b[1;33m\u{2691} {count} flag{}\x1b[0m",
+            if count == 1 { "" } else { "s" }
+        )
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -175,6 +208,7 @@ pub fn ack(paths: &ExoPaths, prefix: &str) -> Result<Flag, AckError> {
             );
             let json = serde_json::to_string_pretty(&acked).map_err(|_| AckError::Write)?;
             std::fs::write(acked_path(paths), json).map_err(|_| AckError::Write)?;
+            let _ = open(paths); // refresh the status-line count
             Ok(flag)
         }
         _ => Err(AckError::Ambiguous(
@@ -463,5 +497,30 @@ mod tests {
         assert!(block.contains("concern 9"));
         assert!(!block.contains("concern 10"));
         assert!(block.contains("and 2 more"));
+    }
+    #[test]
+    fn the_open_count_follows_raise_and_ack() {
+        let (_d, paths) = paths_with(&[(
+            "p",
+            "a.md",
+            "**Flag** \u{2014} one.\n\n**Flag** \u{2014} two.\n",
+        )]);
+        // Never scanned: nothing to show, and no file is invented.
+        assert_eq!(last_open_count(&paths), 0);
+
+        let flags = open(&paths);
+        assert_eq!(last_open_count(&paths), 2);
+
+        ack(&paths, &flags[0].id).unwrap();
+        assert_eq!(last_open_count(&paths), 1);
+        ack(&paths, &flags[1].id).unwrap();
+        assert_eq!(last_open_count(&paths), 0);
+    }
+
+    #[test]
+    fn the_status_line_shows_a_marker_only_when_flags_are_open() {
+        assert_eq!(statusline_marker(0), "");
+        assert!(statusline_marker(1).contains("\u{2691} 1 flag\x1b"));
+        assert!(statusline_marker(3).contains("\u{2691} 3 flags"));
     }
 }

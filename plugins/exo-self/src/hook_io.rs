@@ -1,22 +1,22 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use std::io::Read;
 
 /// Common fields from Claude Code hook input (stdin JSON)
-#[derive(Deserialize, Debug, Default)]
-#[serde(default)]
+#[derive(Debug, Default)]
 pub struct HookInput {
     pub session_id: String,
     pub cwd: String,
     pub transcript_path: String,
     pub trigger: String,
+    /// SessionStart only: "startup", "resume", "clear" or "compact".
+    pub source: String,
     pub reason: String,
     pub tool_name: String,
     pub tool_input: Value,
     pub error: String,
     pub stop_hook_active: bool,
     pub agent_type: String,
-    pub permission_mode: String,
     /// Reasoning-effort level, when the host supplies it (empty otherwise). Spike (#19
     /// follow-up): confirmed present in this Claude Code's transcript records; captured
     /// gracefully to verify empirically which hook events actually carry it in stdin.
@@ -30,7 +30,54 @@ impl HookInput {
         if std::io::stdin().read_to_string(&mut buf).is_err() {
             return Self::default();
         }
-        serde_json::from_str(&buf).unwrap_or_default()
+        Self::parse(&buf)
+    }
+
+    /// Parse hook input, one field at a time.
+    ///
+    /// Parsing the whole struct at once meant one field of an unexpected type
+    /// (the host sending `error` as an object, say) discarded every field,
+    /// the session id included. Handlers then saw an empty session id and
+    /// returned a no-op `{}`, which is also what a healthy run prints, so the
+    /// failure and task counters sat at zero with nothing to show for it. Each
+    /// field now stands alone: a string is taken as is, any other value is kept
+    /// as its JSON text, and a field that is absent stays at its default.
+    pub fn parse(raw: &str) -> Self {
+        let Ok(Value::Object(map)) = serde_json::from_str::<Value>(raw) else {
+            return Self::default();
+        };
+        let text = |key: &str| match map.get(key) {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Null) | None => String::new(),
+            Some(other) => other.to_string(),
+        };
+        let mut input = Self {
+            session_id: text("session_id"),
+            cwd: text("cwd"),
+            transcript_path: text("transcript_path"),
+            trigger: text("trigger"),
+            source: text("source"),
+            reason: text("reason"),
+            tool_name: text("tool_name"),
+            tool_input: map.get("tool_input").cloned().unwrap_or(Value::Null),
+            error: text("error"),
+            stop_hook_active: map
+                .get("stop_hook_active")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            agent_type: text("agent_type"),
+            effort: text("effort"),
+        };
+        // A transcript is named for its session. Use that when the id is missing.
+        if input.session_id.is_empty()
+            && let Some(stem) = std::path::Path::new(&input.transcript_path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+            && input.transcript_path.ends_with(".jsonl")
+        {
+            input.session_id = stem.to_string();
+        }
+        input
     }
 }
 
@@ -107,15 +154,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn one_field_of_the_wrong_type_does_not_discard_the_session_id() {
+        // The regression: any of these made the old whole-struct parse fall back
+        // to defaults, so the handler saw no session and did nothing.
+        for raw in [
+            r#"{"session_id":"s1","tool_name":"Bash","error":{"message":"exit 3","code":3}}"#,
+            r#"{"session_id":"s1","tool_name":"Bash","effort":{"level":"high"}}"#,
+            r#"{"session_id":"s1","tool_name":"Bash","stop_hook_active":"false"}"#,
+            r#"{"session_id":"s1","tool_name":"Bash","cwd":null,"permission_mode":7}"#,
+        ] {
+            let hi = HookInput::parse(raw);
+            assert_eq!(hi.session_id, "s1", "{raw}");
+            assert_eq!(hi.tool_name, "Bash", "{raw}");
+        }
+        let hi = HookInput::parse(r#"{"session_id":"s1","error":{"message":"exit 3"}}"#);
+        assert_eq!(hi.error, r#"{"message":"exit 3"}"#);
+    }
+
+    #[test]
+    fn well_formed_input_parses_as_before() {
+        let hi = HookInput::parse(
+            r#"{"session_id":"s","cwd":"/w","transcript_path":"/t/s.jsonl","trigger":"auto",
+                "source":"resume","reason":"exit","tool_name":"Bash",
+                "tool_input":{"command":"ls"},"error":"boom","stop_hook_active":true,
+                "agent_type":"Explore","permission_mode":"auto","effort":"high",
+                "an_unknown_field":[1,2,3]}"#,
+        );
+        assert_eq!(hi.session_id, "s");
+        assert_eq!(hi.cwd, "/w");
+        assert_eq!(hi.trigger, "auto");
+        assert_eq!(hi.source, "resume");
+        assert_eq!(hi.reason, "exit");
+        assert_eq!(hi.tool_input["command"], "ls");
+        assert_eq!(hi.error, "boom");
+        assert!(hi.stop_hook_active);
+        assert_eq!(hi.agent_type, "Explore");
+        assert_eq!(hi.effort, "high");
+    }
+
+    #[test]
+    fn a_missing_session_id_is_taken_from_the_transcript_name() {
+        let hi = HookInput::parse(
+            r#"{"transcript_path":"/p/ccff8de5-370f-454e-9c45-2d4c1e0b0453.jsonl","tool_name":"Bash"}"#,
+        );
+        assert_eq!(hi.session_id, "ccff8de5-370f-454e-9c45-2d4c1e0b0453");
+        // A stated id wins, and a path that is not a transcript is not used.
+        let hi = HookInput::parse(r#"{"session_id":"s","transcript_path":"/p/other.jsonl"}"#);
+        assert_eq!(hi.session_id, "s");
+        let hi = HookInput::parse(r#"{"transcript_path":"/p/notes.md"}"#);
+        assert_eq!(hi.session_id, "");
+    }
+
+    #[test]
+    fn input_that_is_not_a_json_object_gives_defaults() {
+        for raw in ["", "not json", "[1,2]", "\"s\"", "null"] {
+            assert_eq!(HookInput::parse(raw).session_id, "", "{raw}");
+        }
+    }
+
+    #[test]
     fn hookinput_captures_effort_when_present() {
-        let hi: HookInput = serde_json::from_str(r#"{"session_id":"s","effort":"xhigh"}"#).unwrap();
+        let hi = HookInput::parse(r#"{"session_id":"s","effort":"xhigh"}"#);
         assert_eq!(hi.effort, "xhigh");
     }
 
     #[test]
     fn hookinput_effort_defaults_empty_when_absent() {
         // Graceful degradation: hosts/events without the field must not break parsing.
-        let hi: HookInput = serde_json::from_str(r#"{"session_id":"s"}"#).unwrap();
+        let hi = HookInput::parse(r#"{"session_id":"s"}"#);
         assert_eq!(hi.effort, "");
     }
 }

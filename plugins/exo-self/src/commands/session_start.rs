@@ -21,10 +21,7 @@ pub fn run() {
         input.session_id.clone()
     };
 
-    // Write fresh state for this session
-    let mut state = SessionState::default();
-    state.session_id = session_id.clone();
-    state.session_start = state::now();
+    let mut state = initial_state(&paths, &session_id, &input.source);
     state.project_cwd = if !input.cwd.is_empty() {
         input.cwd.clone()
     } else {
@@ -153,6 +150,9 @@ pub fn run() {
         - When noting communication quality, use Gricean terms: \
         Quantity (informative enough without excess?), Quality (unsupported claims?), \
         Relation (stayed relevant?), Manner (clear and organized?)\n\
+        - Work products you want to keep (research reports, runbooks, review tables) go in a \
+        subdirectory of the project's notes folder, e.g. `artifacts/`, not beside the notes: \
+        every `.md` file at the top level is read as a session note.\n\
         - `{exo_root}/journal.md` — cross-project observations\n\
         - `{exo_root}/interests.md` — curiosities to explore\n\n\
         **All exo-self files live under `{exo_root}/`.** Never write to `~/.claude/projects/`.\n\n\
@@ -332,6 +332,12 @@ pub fn run() {
     // No digest hint here. A suggestion made at session start lands just as the
     // session turns to the user's task, and went unacted on for months (#24). The
     // context monitor makes it at the first checkpoint instead.
+
+    // Reminders the user asked every session to give them.
+    let reminders_section = crate::reminders::section(&paths);
+    if !reminders_section.is_empty() {
+        sections.push(reminders_section);
+    }
 
     // Open flags: concerns earlier sessions raised for the user, from any project (#25).
     let flags_section = crate::flags::session_section(&crate::flags::open(&paths), 10);
@@ -513,6 +519,27 @@ fn load_and_consume_scout(paths: &ExoPaths, project_slug: &str) -> String {
         useful context, not a contract. Where your own investigation disagrees, trust your tools.\n\n\
         {content}"
     )
+}
+
+/// The state a session starts with.
+///
+/// A new or cleared session starts from nothing. A resumed session keeps what
+/// it had: SessionStart also fires on resume, and writing a fresh state there
+/// zeroed the failure, task and compaction counts and restarted the clock each
+/// time a long-running session was reopened, so a session that had compacted a
+/// dozen times reported none.
+fn initial_state(paths: &ExoPaths, session_id: &str, source: &str) -> SessionState {
+    if source == "resume" && paths.state_file(session_id).is_file() {
+        let state = SessionState::load(paths, session_id);
+        if state.session_start > 0.0 {
+            return state;
+        }
+    }
+    SessionState {
+        session_id: session_id.to_string(),
+        session_start: state::now(),
+        ..SessionState::default()
+    }
 }
 
 /// The markers a session note can carry, one instruction line each.
@@ -798,5 +825,51 @@ mod tests {
         );
         // The guide quotes the syntax in code, which must not itself be a flag.
         assert!(crate::markdown::extract_flags(&guide).is_empty());
+    }
+    #[test]
+    fn a_resumed_session_keeps_its_counters_and_clock() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let mut earlier = initial_state(&paths, "s1", "startup");
+        earlier.session_start -= 7200.0;
+        earlier.tool_failures = 4;
+        earlier.task_completions = 9;
+        earlier.compactions = 12;
+        earlier.save(&paths);
+
+        let resumed = initial_state(&paths, "s1", "resume");
+        assert_eq!(resumed.tool_failures, 4);
+        assert_eq!(resumed.task_completions, 9);
+        assert_eq!(resumed.compactions, 12);
+        // The clock is the original one, not "now". Compared with a tolerance:
+        // a float read back from JSON can differ in its last bit.
+        assert!((resumed.session_start - earlier.session_start).abs() < 0.001);
+        assert!(state::now() - resumed.session_start > 7000.0);
+    }
+
+    #[test]
+    fn startup_and_clear_start_from_nothing_even_with_a_state_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let mut earlier = initial_state(&paths, "s1", "startup");
+        earlier.tool_failures = 4;
+        earlier.save(&paths);
+
+        for source in ["startup", "clear", ""] {
+            let state = initial_state(&paths, "s1", source);
+            assert_eq!(state.tool_failures, 0, "{source}");
+            assert_eq!(state.session_id, "s1");
+            assert!(state.session_start > 0.0);
+        }
+    }
+
+    #[test]
+    fn a_resume_with_no_state_file_starts_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let state = initial_state(&paths, "never-seen", "resume");
+        assert_eq!(state.session_id, "never-seen");
+        assert_eq!(state.compactions, 0);
+        assert!(state.session_start > 0.0);
     }
 }

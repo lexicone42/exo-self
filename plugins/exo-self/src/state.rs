@@ -114,7 +114,11 @@ impl SessionState {
             return Self::default();
         }
         let path = paths.state_file(session_id);
+        // A state file that is missing or unreadable gives a fresh state for
+        // this session. It must carry the id: `save` refuses a state without
+        // one, so a handler that loaded a fresh state and saved it wrote nothing.
         Self::load_from(&path).unwrap_or_else(|| Self {
+            session_id: session_id.to_string(),
             session_start: now(),
             ..Self::default()
         })
@@ -178,4 +182,34 @@ pub fn now() -> f64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs_f64()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_session_with_no_state_file_can_still_be_saved() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+
+        let mut state = SessionState::load(&paths, "fresh");
+        assert_eq!(state.session_id, "fresh");
+        state.tool_failures += 1;
+        state.save(&paths);
+
+        let again = SessionState::load(&paths, "fresh");
+        assert_eq!(again.tool_failures, 1);
+    }
+
+    #[test]
+    fn a_state_with_no_session_id_is_not_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        SessionState::load(&paths, "").save(&paths);
+        assert!(
+            !paths.sessions_dir.exists()
+                || std::fs::read_dir(&paths.sessions_dir).unwrap().count() == 0
+        );
+    }
 }

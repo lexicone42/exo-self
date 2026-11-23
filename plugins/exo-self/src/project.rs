@@ -523,6 +523,108 @@ pub fn detect_wrote_notes(state: &SessionState, paths: &ExoPaths, session_start:
     false
 }
 
+/// The session notes in a project that belong to one session, oldest first.
+///
+/// Sessions do not keep to the one suggested file: they name notes after the
+/// work, and write several in a sitting. A note belongs to the session when
+///
+///   * its frontmatter `session_id` is the session's id or its 8-character
+///     short form, or
+///   * its file name contains the short form, or
+///   * it names no session at all and was written after the session started.
+///
+/// The last rule covers notes written without frontmatter. Two sessions open
+/// in one project could each claim such a note; what is harvested from it is
+/// the same either way and is de-duplicated, so only its session tag is in doubt.
+pub fn session_note_paths(
+    paths: &ExoPaths,
+    slug: &str,
+    session_id: &str,
+    session_start: f64,
+) -> Vec<std::path::PathBuf> {
+    if slug.is_empty() || session_id.is_empty() {
+        return Vec::new();
+    }
+    let short: String = session_id.chars().take(8).collect();
+    let Ok(entries) = std::fs::read_dir(paths.project_notes_dir(slug)) else {
+        return Vec::new();
+    };
+    let mut owned: Vec<(std::time::SystemTime, std::path::PathBuf)> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !name.ends_with(".md") || name.starts_with('_') || name == "scout.md" || !path.is_file()
+        {
+            continue;
+        }
+        let Ok(mtime) = entry.metadata().and_then(|m| m.modified()) else {
+            continue;
+        };
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let (fm, _) = markdown::parse_frontmatter(&content);
+        let stated = fm
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let is_owned = if !stated.is_empty() {
+            stated == session_id || (stated.len() >= 8 && session_id.starts_with(stated))
+        } else if short.len() == 8 && name.contains(short.as_str()) {
+            true
+        } else {
+            session_start > 0.0
+                && mtime
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .is_ok_and(|d| d.as_secs_f64() > session_start)
+                && !names_another_session(name)
+        };
+        if is_owned {
+            owned.push((mtime, path));
+        }
+    }
+    owned.sort();
+    owned.into_iter().map(|(_, path)| path).collect()
+}
+
+/// True when a note's file name carries a session's short id in the suggested
+/// position (`2026-11-23--ccff8de5.md`, `2026-09-21--c03fe411-k.md`).
+fn names_another_session(file_name: &str) -> bool {
+    file_name.split_once("--").is_some_and(|(_, rest)| {
+        let id: String = rest.chars().take(8).collect();
+        id.len() == 8 && id.chars().all(|c| c.is_ascii_hexdigit())
+    })
+}
+
+/// The prose of every note the session wrote, apart from `except`, joined by
+/// blank lines. Used with the suggested note's own prose to harvest markers.
+pub fn other_session_prose(
+    paths: &ExoPaths,
+    slug: &str,
+    session_id: &str,
+    session_start: f64,
+    except: &str,
+) -> String {
+    session_note_paths(paths, slug, session_id, session_start)
+        .into_iter()
+        .filter(|p| except.is_empty() || p != std::path::Path::new(except))
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .map(|content| {
+            let (_, prose) = markdown::parse_frontmatter(&content);
+            if prose.trim().is_empty() {
+                content
+            } else {
+                prose
+            }
+        })
+        .filter(|prose| !prose.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 /// Modification time (Unix seconds) of the most recently written session note
 /// for a project, or None when it has none. `_`-prefixed files are summaries,
 /// not session notes, and are not counted.
@@ -934,6 +1036,89 @@ mod tests {
             "`session_id: \"s1\"`, `project: \"p\"`, `model: \"Opus 5.5\"`"
         );
         assert_eq!(identity_lines("s1", "", Some("")), "`session_id: \"s1\"`");
+    }
+
+    #[test]
+    fn session_notes_are_found_by_frontmatter_file_name_or_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let notes = paths.project_notes_dir("p");
+        std::fs::create_dir_all(&notes).unwrap();
+        let sid = "c03fe411-2d1e-4f0a-9c11-000000000000";
+        let started = crate::state::now() - 3600.0;
+        let write = |name: &str, body: &str| std::fs::write(notes.join(name), body).unwrap();
+
+        write(
+            "2026-11-23--c03fe411.md",
+            "---\nengagement: 4\n---\n\nsuggested file\n",
+        );
+        write(
+            "2026-11-21-design-first.md",
+            &format!("---\nsession_id: \"{sid}\"\n---\n\nfull id in frontmatter\n"),
+        );
+        write(
+            "2026-11-22-landing.md",
+            "---\nsession_id: \"c03fe411\"\n---\n\nshort id in frontmatter\n",
+        );
+        write(
+            "2026-11-23-waiting-well.md",
+            "no frontmatter, written this session\n",
+        );
+        // Not this session's:
+        write(
+            "2026-11-23--dee2313f.md",
+            "---\nengagement: 5\n---\n\nanother session's suggested file\n",
+        );
+        write(
+            "2026-11-20-theirs.md",
+            "---\nsession_id: \"dee2313f-0000\"\n---\n\nnames another session\n",
+        );
+        write("_digest.md", "digest\n");
+
+        let names: Vec<String> = session_note_paths(&paths, "p", sid, started)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(
+            sorted,
+            vec![
+                "2026-11-21-design-first.md",
+                "2026-11-22-landing.md",
+                "2026-11-23--c03fe411.md",
+                "2026-11-23-waiting-well.md",
+            ]
+        );
+
+        let prose = other_session_prose(
+            &paths,
+            "p",
+            sid,
+            started,
+            &notes.join("2026-11-23--c03fe411.md").to_string_lossy(),
+        );
+        assert!(prose.contains("full id in frontmatter"));
+        assert!(prose.contains("short id in frontmatter"));
+        assert!(prose.contains("no frontmatter, written this session"));
+        assert!(!prose.contains("suggested file"));
+        assert!(!prose.contains("another session"));
+    }
+
+    #[test]
+    fn an_unlabelled_note_from_before_the_session_is_not_claimed() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let notes = paths.project_notes_dir("p");
+        std::fs::create_dir_all(&notes).unwrap();
+        std::fs::write(notes.join("2026-10-01-old.md"), "written long ago\n").unwrap();
+        // The session starts after the note was written.
+        let started = crate::state::now() + 60.0;
+        assert!(session_note_paths(&paths, "p", "abcdef12-0000", started).is_empty());
+        // And with no known start time nothing unlabelled is claimed.
+        assert!(session_note_paths(&paths, "p", "abcdef12-0000", 0.0).is_empty());
+        assert!(session_note_paths(&paths, "", "abcdef12-0000", 1.0).is_empty());
+        assert!(session_note_paths(&paths, "p", "", 1.0).is_empty());
     }
 
     /// Build a minimal ExoPaths anchored at `root`. Only `per_project_dir` matters
