@@ -6,7 +6,7 @@
 //! every session, in every project, until the user acknowledges it.
 //!
 //! The notes are the source of truth. Flags are found by scanning them, so a
-//! flag is visible as soon as it is written, not when its session ends, and
+//! flag is found by the next scan after it is written, not when its session ends, and
 //! nothing a concurrent session writes can lose one. Acknowledgements are a
 //! separate small file keyed by an id derived from the flag's project and text.
 
@@ -35,13 +35,26 @@ fn acked_path(paths: &ExoPaths) -> PathBuf {
     paths.root.join("flags-acked.json")
 }
 
-/// Stable id for a flag: FNV-1a over its project and normalised text.
+/// Stable id for a flag: FNV-1a over its project, the note that raised it, and
+/// its normalised text.
 ///
-/// Case and whitespace are normalised and only the first 200 characters count,
-/// so re-wrapping a note or appending to the flag's paragraph does not reopen
-/// an acknowledged flag. Written out by hand because std's hasher makes no
-/// promise of stable output across releases.
-pub fn flag_id(project: &str, text: &str) -> String {
+/// Case and whitespace are normalised, so re-wrapping a note does not reopen an
+/// acknowledged flag. Only the first 200 characters of the text count; a change
+/// within them makes a new flag. The note's file name is part of the id so that
+/// a concern raised again in a later note is shown again, and is not silently
+/// covered by an acknowledgement of the earlier one. Written out by hand
+/// because std's hasher makes no promise of stable output across releases.
+pub fn flag_id(project: &str, file: &str, text: &str) -> String {
+    hash_id(&[project, file], text)
+}
+
+/// The id scheme before the note's file name was included. Acknowledgements
+/// recorded under it are still honoured.
+pub fn legacy_flag_id(project: &str, text: &str) -> String {
+    hash_id(&[project], text)
+}
+
+fn hash_id(scope: &[&str], text: &str) -> String {
     let normalised: String = text
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -51,11 +64,10 @@ pub fn flag_id(project: &str, text: &str) -> String {
         .take(200)
         .collect();
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in project
-        .bytes()
-        .chain(std::iter::once(b'\n'))
-        .chain(normalised.bytes())
-    {
+    let scoped = scope
+        .iter()
+        .flat_map(|part| part.bytes().chain(std::iter::once(b'\n')));
+    for byte in scoped.chain(normalised.bytes()) {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
@@ -111,7 +123,7 @@ pub fn scan(paths: &ExoPaths) -> Vec<Flag> {
                 .and_then(|n| n.to_str())
                 .unwrap_or_default();
             for text in markdown::extract_flags(body) {
-                let id = flag_id(project, &text);
+                let id = flag_id(project, name, &text);
                 if flags.iter().any(|f| f.id == id) {
                     continue;
                 }
@@ -127,11 +139,31 @@ pub fn scan(paths: &ExoPaths) -> Vec<Flag> {
     flags
 }
 
+/// The acknowledgements on record. A missing file is an empty record; a file
+/// that exists and cannot be parsed is an error, so that nothing overwrites it.
+pub fn load_acked_strict(paths: &ExoPaths) -> Result<BTreeMap<String, Ack>, String> {
+    let path = acked_path(paths);
+    match std::fs::read_to_string(&path) {
+        Ok(content) if content.trim().is_empty() => Ok(BTreeMap::new()),
+        Ok(content) => serde_json::from_str(&content).map_err(|e| {
+            format!(
+                "{} is not readable as acknowledgements: {e}",
+                path.display()
+            )
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+    }
+}
+
+/// For display: an unreadable file shows every flag as open, which is the
+/// safe direction, and `ack` will refuse to write over it.
 pub fn load_acked(paths: &ExoPaths) -> BTreeMap<String, Ack> {
-    std::fs::read_to_string(acked_path(paths))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    load_acked_strict(paths).unwrap_or_default()
+}
+
+fn is_acked(acked: &BTreeMap<String, Ack>, flag: &Flag) -> bool {
+    acked.contains_key(&flag.id) || acked.contains_key(&legacy_flag_id(&flag.project, &flag.text))
 }
 
 fn count_path(paths: &ExoPaths) -> PathBuf {
@@ -147,7 +179,7 @@ pub fn open(paths: &ExoPaths) -> Vec<Flag> {
     let acked = load_acked(paths);
     let open: Vec<Flag> = scan(paths)
         .into_iter()
-        .filter(|f| !acked.contains_key(&f.id))
+        .filter(|f| !is_acked(&acked, f))
         .collect();
     if paths.root.is_dir() {
         let _ = std::fs::write(count_path(paths), open.len().to_string());
@@ -180,6 +212,8 @@ pub fn statusline_marker(count: usize) -> String {
 pub enum AckError {
     NotFound,
     Ambiguous(Vec<String>),
+    /// The acknowledgement file exists and cannot be parsed. It is left alone.
+    Unreadable(String),
     Write,
 }
 
@@ -197,7 +231,7 @@ pub fn ack(paths: &ExoPaths, prefix: &str) -> Result<Flag, AckError> {
         0 => Err(AckError::NotFound),
         1 => {
             let flag = matches.remove(0);
-            let mut acked = load_acked(paths);
+            let mut acked = load_acked_strict(paths).map_err(AckError::Unreadable)?;
             acked.insert(
                 flag.id.clone(),
                 Ack {
@@ -207,7 +241,11 @@ pub fn ack(paths: &ExoPaths, prefix: &str) -> Result<Flag, AckError> {
                 },
             );
             let json = serde_json::to_string_pretty(&acked).map_err(|_| AckError::Write)?;
-            std::fs::write(acked_path(paths), json).map_err(|_| AckError::Write)?;
+            // Write beside the file and rename over it, so an interrupted write
+            // cannot leave a half-written record of every acknowledgement.
+            let tmp = acked_path(paths).with_extension(format!("json.tmp{}", std::process::id()));
+            std::fs::write(&tmp, json).map_err(|_| AckError::Write)?;
+            std::fs::rename(&tmp, acked_path(paths)).map_err(|_| AckError::Write)?;
             let _ = open(paths); // refresh the status-line count
             Ok(flag)
         }
@@ -308,6 +346,10 @@ pub fn run_ack(id: &str) -> u8 {
         }
         Err(AckError::Ambiguous(ids)) => {
             eprintln!("flag: '{id}' matches several: {}", ids.join(", "));
+            1
+        }
+        Err(AckError::Unreadable(why)) => {
+            eprintln!("flag: {why}. Fix or move that file; nothing was changed.");
             1
         }
         Err(AckError::Write) => {
@@ -482,13 +524,16 @@ mod tests {
     fn flag_ids_are_stable_values() {
         // Pinned: an id that changed between builds would reopen every acked flag.
         assert_eq!(
-            flag_id("p", "The domain lapsed."),
-            flag_id("p", "the  DOMAIN\nlapsed.")
+            flag_id("p", "a.md", "The domain lapsed."),
+            flag_id("p", "a.md", "the  DOMAIN\nlapsed.")
         );
-        assert_eq!(flag_id("p", "The domain lapsed."), "a62376ce");
-        assert_eq!(flag_id("p", "x").len(), 8);
-        assert_ne!(flag_id("p", "x"), flag_id("q", "x"));
-        assert_ne!(flag_id("p", "x"), flag_id("p", "y"));
+        assert_eq!(legacy_flag_id("p", "The domain lapsed."), "a62376ce");
+        assert_eq!(flag_id("p", "a.md", "x").len(), 8);
+        assert_ne!(flag_id("p", "a.md", "x"), flag_id("q", "a.md", "x"));
+        assert_ne!(flag_id("p", "a.md", "x"), flag_id("p", "b.md", "x"));
+        assert_ne!(flag_id("p", "a.md", "x"), flag_id("p", "a.md", "y"));
+        // Scope parts cannot run together: ("p", "a") differs from ("pa", "").
+        assert_ne!(flag_id("p", "a", "x"), flag_id("pa", "", "x"));
     }
 
     #[test]
@@ -561,5 +606,80 @@ mod tests {
         let (_d, paths) = paths_with(&[("p", "a.md", "no flags\n")]);
         assert_eq!(list_text(&paths, false), "No open flags.");
         assert_eq!(list_text(&paths, true), "No open flags.");
+    }
+    #[test]
+    fn a_concern_raised_again_in_a_later_note_is_shown_again() {
+        let (_d, paths) = paths_with(&[(
+            "p",
+            "2026-07-01.md",
+            "**Flag** \u{2014} CI is red on main.\n",
+        )]);
+        let id = open(&paths)[0].id.clone();
+        ack(&paths, &id).unwrap();
+        assert!(open(&paths).is_empty());
+
+        std::fs::write(
+            paths.project_notes_dir("p").join("2026-11-20.md"),
+            "**Flag** \u{2014} CI is red on main.\n",
+        )
+        .unwrap();
+        let again = open(&paths);
+        assert_eq!(again.len(), 1);
+        assert_eq!(again[0].file, "2026-11-20.md");
+    }
+
+    #[test]
+    fn an_acknowledgement_recorded_under_the_old_id_scheme_still_counts() {
+        let (_d, paths) = paths_with(&[("p", "a.md", "**Flag** \u{2014} The domain lapsed.\n")]);
+        let legacy = legacy_flag_id("p", "The domain lapsed.");
+        std::fs::write(
+            acked_path(&paths),
+            format!(
+                r#"{{"{legacy}":{{"acked_at":"t","project":"p","text":"The domain lapsed."}}}}"#
+            ),
+        )
+        .unwrap();
+        assert!(open(&paths).is_empty());
+    }
+
+    #[test]
+    fn an_unreadable_acknowledgement_file_is_never_overwritten() {
+        let (_d, paths) = paths_with(&[("p", "a.md", "**Flag** \u{2014} one.\n")]);
+        let damaged = r#"{"11111111":{"acked_at":"t","project":"p","text":"earlier"},"#;
+        std::fs::write(acked_path(&paths), damaged).unwrap();
+
+        // Shown as open, which is the safe direction.
+        let flags = open(&paths);
+        assert_eq!(flags.len(), 1);
+        // And ack refuses, leaving the file exactly as it was.
+        assert!(matches!(
+            ack(&paths, &flags[0].id),
+            Err(AckError::Unreadable(_))
+        ));
+        assert_eq!(
+            std::fs::read_to_string(acked_path(&paths)).unwrap(),
+            damaged
+        );
+    }
+
+    #[test]
+    fn prose_that_mentions_the_marker_does_not_raise_a_flag() {
+        let (_d, paths) = paths_with(&[(
+            "p",
+            "a.md",
+            "Today I built the **Flag** marker and a **Flag** channel for the status line.\n",
+        )]);
+        assert!(scan(&paths).is_empty());
+    }
+
+    #[test]
+    fn a_note_with_an_empty_frontmatter_block_does_not_break_the_scan() {
+        let (_d, paths) = paths_with(&[
+            ("p", "a.md", "---\n---\n\n**Flag** \u{2014} still found.\n"),
+            ("p", "b.md", "---\n---"),
+        ]);
+        let flags = scan(&paths);
+        assert_eq!(flags.len(), 1);
+        assert_eq!(flags[0].text, "still found.");
     }
 }
