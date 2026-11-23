@@ -70,8 +70,16 @@ pub fn run() {
         cfg.estimated_max_chars,
     );
 
+    // Observations recorded by agents this session started. Delivered with
+    // the next prompt whatever the context estimate says.
+    let observations = crate::observations::section(&crate::observations::take(&paths, session_id));
+
     if usage_ratio == 0.0 {
-        hook_io::empty_output();
+        if observations.is_empty() {
+            hook_io::empty_output();
+        } else {
+            hook_io::hook_output("UserPromptSubmit", &observations);
+        }
         return;
     }
 
@@ -177,6 +185,13 @@ pub fn run() {
     }
 
     state.save(&paths);
+
+    if !observations.is_empty() {
+        output_msg = Some(match output_msg {
+            Some(existing) => format!("{observations}\n\n{existing}"),
+            None => observations,
+        });
+    }
 
     if let Some(msg) = output_msg {
         hook_io::hook_output("UserPromptSubmit", &msg);

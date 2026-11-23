@@ -71,6 +71,25 @@ pub enum Command {
     },
     /// List projects whose digest is missing or stale
     Digests,
+    /// Record an observation for the session that started this agent
+    Observe {
+        /// The parent session's id, as given in the agent's start-up text
+        #[arg(long)]
+        session: Option<String>,
+        /// A short label for the agent recording it
+        #[arg(long)]
+        agent: Option<String>,
+        /// The observation (read from stdin when omitted)
+        text: Vec<String>,
+    },
+    /// Show observations waiting for a session and mark them delivered
+    Observations {
+        /// The session id
+        session: String,
+        /// Show without marking delivered
+        #[arg(long)]
+        peek: bool,
+    },
     /// Reflexive analysis of exo-self session data
     Reflect {
         /// Load session data + meta into redb, infer preferences
@@ -110,6 +129,8 @@ impl Command {
                 | Command::Sigil { .. }
                 | Command::Flag { .. }
                 | Command::Digests
+                | Command::Observe { .. }
+                | Command::Observations { .. }
         )
     }
 }
@@ -190,6 +211,14 @@ pub fn dispatch(cmd: Command) -> u8 {
             FlagAction::List { all } => crate::flags::run_list(all),
             FlagAction::Ack { id } => crate::flags::run_ack(&id),
         },
+        Command::Observe {
+            session,
+            agent,
+            text,
+        } => crate::observations::run_observe(session, agent, text),
+        Command::Observations { session, peek } => {
+            crate::observations::run_observations(&session, peek)
+        }
         Command::Digests => {
             let paths = crate::paths::ExoPaths::new();
             let backlog = crate::project::digest_backlog(&paths);

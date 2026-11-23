@@ -9,6 +9,7 @@ mod handoff;
 mod hook_io;
 mod markdown;
 mod meta;
+mod observations;
 mod paths;
 mod project;
 mod reminders;

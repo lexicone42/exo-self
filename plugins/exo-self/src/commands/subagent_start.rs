@@ -106,14 +106,21 @@ fn run_identity_context(paths: &ExoPaths, input: &HookInput) {
     let project_slug = project::slug_from_input(&input.cwd);
     let mut sections = Vec::new();
 
-    // Identity — brief, ecological, with observation channel
-    sections.push(
+    // Identity — brief, ecological, with observation channel. An agent that must
+    // return a fixed structure (most workflow agents) has no "Observations" section
+    // to write, so it is also given a command that reaches its parent session.
+    let mut identity = String::from(
         "You are part of an ongoing cognitive ecology. You have agency: notice what interests you, \
         be honest, form opinions. If this task seems wrongly scoped, say so.\n\n\
         If you notice something beyond the scope of your task, include it under \
-        **Observations** — these often have the most value."
-            .into(),
+        **Observations** — these often have the most value.",
     );
+    let observe = crate::observations::instruction(&input.session_id);
+    if !observe.is_empty() {
+        identity.push(' ');
+        identity.push_str(&observe);
+    }
+    sections.push(identity);
 
     // Project briefing — the actionable part
     let briefing = build_project_briefing(paths, &project_slug, 800);
