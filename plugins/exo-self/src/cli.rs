@@ -64,6 +64,11 @@ pub enum Command {
         #[arg(long, value_names = &["FILE", "PHRASE"], num_args = 2)]
         charge: Option<Vec<String>>,
     },
+    /// Flags raised for the user in session notes: list them, or acknowledge one
+    Flag {
+        #[command(subcommand)]
+        action: FlagAction,
+    },
     /// Reflexive analysis of exo-self session data
     Reflect {
         /// Load session data + meta into redb, infer preferences
@@ -72,6 +77,21 @@ pub enum Command {
         /// Generate report from redb (cross-machine)
         #[arg(long)]
         db: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FlagAction {
+    /// List open flags
+    List {
+        /// Include flags that were already acknowledged
+        #[arg(long)]
+        all: bool,
+    },
+    /// Acknowledge a flag by id (a unique prefix is enough)
+    Ack {
+        /// The flag id shown by `flag list`
+        id: String,
     },
 }
 
@@ -86,6 +106,7 @@ impl Command {
                 | Command::Backfill
                 | Command::BackfillTraces
                 | Command::Sigil { .. }
+                | Command::Flag { .. }
         )
     }
 }
@@ -162,6 +183,10 @@ pub fn dispatch(cmd: Command) -> u8 {
             commands::reflect::run(ingest, db);
             0
         }
+        Command::Flag { action } => match action {
+            FlagAction::List { all } => crate::flags::run_list(all),
+            FlagAction::Ack { id } => crate::flags::run_ack(&id),
+        },
         Command::Backfill => {
             commands::backfill::run();
             0

@@ -125,8 +125,13 @@ fn bold_marker_sites(text: &str, name: &str) -> Vec<(usize, MarkerShape)> {
     let mut sites = Vec::new();
     let mut from = 0;
     while let Some(pos) = text[from..].find(&needle) {
-        let after_name = from + pos + needle.len();
+        let start = from + pos;
+        let after_name = start + needle.len();
         from = after_name;
+        // Inline code quoting the syntax (`**Flag** ...`) is not a marker.
+        if text[..start].ends_with('`') {
+            continue;
+        }
         let rest = &text[after_name..];
         let Some(next) = rest.chars().next() else {
             break;
@@ -162,12 +167,9 @@ pub fn has_marker(text: &str, name: &str) -> bool {
     !bold_marker_sites(text, name).is_empty()
 }
 
-/// Marker extraction: bold markers anywhere in the text, plus `Name:` at the
-/// start of a line (start-of-line only, to avoid false positives in prose).
-fn extract_entries(text: &str, name: &str) -> Vec<String> {
+/// Entries for bold markers only (anywhere in the text).
+fn bold_entries(text: &str, name: &str) -> Vec<String> {
     let mut entries = Vec::new();
-
-    // Pass 1: bold markers (can appear anywhere in text)
     for (pos, shape) in bold_marker_sites(text, name) {
         let Some(mut entry) = extract_after_marker(text, pos) else {
             continue;
@@ -186,6 +188,13 @@ fn extract_entries(text: &str, name: &str) -> Vec<String> {
             entries.push(entry);
         }
     }
+    entries
+}
+
+/// Marker extraction: bold markers anywhere in the text, plus `Name:` at the
+/// start of a line (start-of-line only, to avoid false positives in prose).
+fn extract_entries(text: &str, name: &str) -> Vec<String> {
+    let mut entries = bold_entries(text, name);
 
     // Pass 2: plain marker at start of line (e.g., "Spark: text")
     let plain = format!("{name}:");
@@ -354,6 +363,13 @@ pub fn extract_aversions(text: &str) -> Vec<String> {
 /// Negative stigmergy: traces that warn future participants the map doesn't match the territory.
 pub fn extract_surprises(text: &str) -> Vec<String> {
     extract_entries(text, "Surprise")
+}
+
+/// Extract **Flag** entries from session notes prose: concerns raised for the
+/// user, shown to every session until acknowledged (#25). Bold form only. A
+/// line that merely starts with "Flag:" is too common in ordinary prose.
+pub fn extract_flags(text: &str) -> Vec<String> {
+    bold_entries(text, "Flag")
 }
 
 /// Extract **Friction** entries from session notes prose.
