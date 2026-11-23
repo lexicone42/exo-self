@@ -150,6 +150,9 @@ pub fn run() {
         - When noting communication quality, use Gricean terms: \
         Quantity (informative enough without excess?), Quality (unsupported claims?), \
         Relation (stayed relevant?), Manner (clear and organized?)\n\
+        - Work products you want to keep (research reports, runbooks, review tables) go in a \
+        subdirectory of the project's notes folder, e.g. `artifacts/`, not beside the notes: \
+        every `.md` file at the top level is read as a session note.\n\
         - `{exo_root}/journal.md` — cross-project observations\n\
         - `{exo_root}/interests.md` — curiosities to explore\n\n\
         **All exo-self files live under `{exo_root}/`.** Never write to `~/.claude/projects/`.\n\n\
