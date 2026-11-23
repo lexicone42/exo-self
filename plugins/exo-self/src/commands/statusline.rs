@@ -68,6 +68,11 @@ pub fn run() {
         .unwrap();
     }
 
+    // Open flags: concerns sessions raised for the user (#25). Read from the count
+    // the last scan left; the status line never scans notes itself.
+    let flags_open = crate::flags::last_open_count(&crate::paths::ExoPaths::new());
+    line1.push_str(&crate::flags::statusline_marker(flags_open));
+
     // Build Line 2: Context bar + percentage + duration + cost
     let duration_ms = get_u64(&input, "/cost/total_duration_ms");
     let duration_hours = duration_ms / 3_600_000;

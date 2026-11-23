@@ -83,6 +83,13 @@ pub fn run() {
         sections.push(reminders_section);
     }
 
+    // Open flags, as at session start. Scanning here also keeps the status-line
+    // count current during sessions that run for days between starts.
+    let flags_section = crate::flags::session_section(&crate::flags::open(&paths), 10);
+    if !flags_section.is_empty() {
+        sections.push(flags_section);
+    }
+
     // Load handoff
     let handoff = load_handoff(&paths, session_id);
     if !handoff.is_empty() {
