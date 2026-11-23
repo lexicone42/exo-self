@@ -8,39 +8,46 @@
 
 use crate::paths::ExoPaths;
 
-/// Longest reminders text shown to a session. The file is the user's and is
-/// expected to be a handful of lines; the cap keeps a runaway file from
+/// Longest reminders text shown to a session, in bytes. The file is the user's
+/// and is expected to be a handful of lines; the cap keeps a runaway file from
 /// crowding out everything else in the hook context.
-const MAX_CHARS: usize = 2000;
+const MAX_BYTES: usize = 2000;
 
 pub fn file(paths: &ExoPaths) -> std::path::PathBuf {
     paths.root.join("user-reminders.md")
 }
 
-/// The reminders as written, without HTML comments and blank padding.
-/// Empty when the file is missing or holds only comments.
+/// Remove every HTML comment from `content`, wherever it starts and ends.
+/// A comment that is never closed runs to the end of the text.
+fn strip_comments(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut rest = content;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(&rest[..start]);
+        match rest[start + 4..].find("-->") {
+            Some(end) => rest = &rest[start + 4 + end + 3..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The reminders as written, with HTML comments removed and blank padding
+/// trimmed. Empty when the file is missing or holds only comments.
 pub fn load(paths: &ExoPaths) -> String {
     let Ok(content) = std::fs::read_to_string(file(paths)) else {
         return String::new();
     };
-    let mut kept = Vec::new();
-    let mut in_comment = false;
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if in_comment {
-            in_comment = !trimmed.contains("-->");
-            continue;
-        }
-        if trimmed.starts_with("<!--") {
-            in_comment = !trimmed.contains("-->");
-            continue;
-        }
-        kept.push(line.trim_end());
-    }
-    let text = kept.join("\n");
+    let stripped = strip_comments(&content);
+    let text = stripped
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
     let text = text.trim();
-    if text.len() > MAX_CHARS {
-        let cut = crate::markdown::safe_truncate(text, MAX_CHARS);
+    if text.len() > MAX_BYTES {
+        let cut = crate::markdown::safe_truncate(text, MAX_BYTES);
         let end = text[..cut].rfind('\n').unwrap_or(cut);
         format!(
             "{}\n[truncated: see {}]",
@@ -124,10 +131,51 @@ mod tests {
             .collect();
         std::fs::write(file(&p), long).unwrap();
         let text = load(&p);
-        assert!(text.len() < MAX_CHARS + 200);
+        assert!(text.len() < MAX_BYTES + 200);
         assert!(text.contains("\n[truncated: see "));
         // The last reminder kept is whole.
         let last = text.lines().rev().nth(1).unwrap();
         assert!(last.starts_with("- reminder number ") && last.len() > 18);
+    }
+    #[test]
+    fn comments_are_removed_wherever_they_sit_and_the_text_around_them_is_kept() {
+        let (_d, p) = paths();
+        std::fs::write(
+            file(&p),
+            "<!-- note --> - first reminder\n\
+             - second <!-- inline --> reminder\n\
+             - third <!-- opens here\nhidden line\ncloses --> stays\n\
+             <!-- a --> - fourth <!-- b\nalso hidden\n-->\n\
+             - fifth\n",
+        )
+        .unwrap();
+        let text = load(&p);
+        for kept in [
+            "- first reminder",
+            "- second  reminder",
+            "- third  stays",
+            "- fourth",
+            "- fifth",
+        ] {
+            assert!(text.contains(kept), "missing {kept:?} in {text:?}");
+        }
+        for hidden in [
+            "note",
+            "inline",
+            "hidden",
+            "opens here",
+            "closes",
+            "<!--",
+            "-->",
+        ] {
+            assert!(!text.contains(hidden), "leaked {hidden:?} in {text:?}");
+        }
+    }
+
+    #[test]
+    fn an_unclosed_comment_hides_the_rest_of_the_file() {
+        let (_d, p) = paths();
+        std::fs::write(file(&p), "- shown\n<!-- never closed\n- not shown\n").unwrap();
+        assert_eq!(load(&p), "- shown");
     }
 }
