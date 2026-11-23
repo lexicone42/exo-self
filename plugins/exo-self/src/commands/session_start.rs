@@ -361,6 +361,12 @@ pub fn run() {
         }
     }
 
+    // Open flags: concerns earlier sessions raised for the user, from any project (#25).
+    let flags_section = crate::flags::session_section(&crate::flags::open(&paths), 10);
+    if !flags_section.is_empty() {
+        sections.push(flags_section);
+    }
+
     // Inject latest handoff as continuity bridge (one-shot: read then delete)
     // This covers the "/clear without compaction" gap — the previous session's
     // working direction, discoveries, and unfinished threads survive the clear.
@@ -571,9 +577,17 @@ pub(crate) fn marker_guide() -> String {
     MARKERS
         .iter()
         .map(|(_, line)| format!("- {line}"))
+        .chain(std::iter::once(format!("- {FLAG_GUIDE}")))
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+/// How to raise a flag (#25). Kept apart from `MARKERS` because a flag is not
+/// a reflection: it is the one trace that is routed to the user.
+pub(crate) const FLAG_GUIDE: &str = "Mark anything the user must see and could miss with \
+    `**Flag** \u{2014} ...` (a security or identity anomaly, a risk of data loss, something \
+    only they can decide). Say it to the user in your reply as well. A flag is shown to \
+    every session in every project until the user acknowledges it, so use it sparingly";
 
 /// Load and consume the latest handoff: a continuity bridge from the previous
 /// session in this project. A handoff written in another project is skipped (#28).
@@ -801,5 +815,16 @@ mod tests {
             markdown::extract_aversions(&note),
             vec!["text for Aversion."]
         );
+    }
+    #[test]
+    fn the_flag_marker_is_taught_in_a_form_the_scanner_reads() {
+        let guide = marker_guide();
+        assert!(guide.contains("`**Flag** "));
+        assert_eq!(
+            crate::markdown::extract_flags("**Flag** \u{2014} the key leaked."),
+            vec!["the key leaked."]
+        );
+        // The guide quotes the syntax in code, which must not itself be a flag.
+        assert!(crate::markdown::extract_flags(&guide).is_empty());
     }
 }
