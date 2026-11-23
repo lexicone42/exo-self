@@ -63,7 +63,10 @@ pub fn run() {
         "## Exo-Self: Post-Compaction Reload (#{compactions})\n\n\
         Context compacted — conversation history compressed, but the ecology persists. {state_msg}\n\
         The traces below are what previous participants (including your earlier self in this session) \
-        left for you. Contribute your own to `~/.claude/exo-self/`."
+        left for you. Contribute your own to `~/.claude/exo-self/`.\n\n\
+        Markers for session notes (the session-start instructions may not have survived compaction):\n\
+        {}",
+        crate::commands::session_start::marker_guide()
     ));
 
     if auto_memory_exists {
