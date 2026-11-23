@@ -43,13 +43,52 @@ fn find_git_root(start: &str) -> Option<std::path::PathBuf> {
     }
     let mut dir = std::path::PathBuf::from(start);
     loop {
-        if dir.join(".git").exists() {
+        let dot_git = dir.join(".git");
+        if dot_git.is_file() {
+            // A linked worktree: its notes belong to the repository it was cut from.
+            return Some(main_repo_of_worktree(&dir, &dot_git).unwrap_or(dir));
+        }
+        if dot_git.exists() {
             return Some(dir);
         }
         if !dir.pop() {
             return None;
         }
     }
+}
+
+/// The main repository a linked worktree belongs to, read from the worktree's
+/// `.git` file (`gitdir: <main>/.git/worktrees/<name>`).
+///
+/// Agent and workflow tooling runs sessions in throwaway worktrees. Keyed by
+/// their own path, those sessions start with none of the project's notes and
+/// leave their own in a directory nobody will open again
+/// (`worktrees--agent-a317...`). Returns None for anything that is not a linked
+/// worktree, such as a submodule, whose `.git` file points under `.git/modules/`.
+fn main_repo_of_worktree(
+    worktree: &std::path::Path,
+    dot_git_file: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let content = std::fs::read_to_string(dot_git_file).ok()?;
+    let gitdir = content
+        .lines()
+        .find_map(|line| line.strip_prefix("gitdir:"))?
+        .trim();
+    let gitdir = std::path::Path::new(gitdir);
+    let gitdir = if gitdir.is_absolute() {
+        gitdir.to_path_buf()
+    } else {
+        worktree.join(gitdir)
+    };
+    // <main>/.git/worktrees/<name>
+    let worktrees_dir = gitdir.parent()?;
+    let git_dir = worktrees_dir.parent()?;
+    if worktrees_dir.file_name()? != "worktrees" || git_dir.file_name()? != ".git" {
+        return None;
+    }
+    let main = git_dir.parent()?;
+    // Normalise `..` segments from a relative gitdir when the path exists.
+    Some(main.canonicalize().unwrap_or_else(|_| main.to_path_buf()))
 }
 
 /// Resolve a project slug for a directory, preferring the git repo root so all
@@ -566,6 +605,64 @@ mod tests {
             slug_from_input(&repo.to_string_lossy()),
             "grandparent--repo"
         );
+    }
+
+    /// Lay out `<tmp>/workspace/myrepo` with a linked worktree at `worktree_rel`,
+    /// the way `git worktree add` does, and return (tmp, repo, worktree).
+    fn repo_with_worktree(
+        worktree_rel: &str,
+        gitdir_line: impl Fn(&std::path::Path) -> String,
+    ) -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("workspace").join("myrepo");
+        let admin = repo.join(".git").join("worktrees").join("wt");
+        std::fs::create_dir_all(&admin).unwrap();
+        let worktree = dir.path().join(worktree_rel);
+        std::fs::create_dir_all(&worktree).unwrap();
+        std::fs::write(worktree.join(".git"), gitdir_line(&admin)).unwrap();
+        (dir, repo, worktree)
+    }
+
+    #[test]
+    fn slug_of_a_linked_worktree_is_its_main_repository() {
+        // The shape that produced `worktrees--agent-a317f67b0b9d84195`.
+        let (_dir, _repo, worktree) = repo_with_worktree("scratch/worktrees/agent-a317", |admin| {
+            format!("gitdir: {}\n", admin.display())
+        });
+        assert_eq!(
+            slug_from_input(&worktree.to_string_lossy()),
+            "workspace--myrepo"
+        );
+        // And from a subdirectory inside the worktree.
+        let sub = worktree.join("crates").join("core");
+        std::fs::create_dir_all(&sub).unwrap();
+        assert_eq!(slug_from_input(&sub.to_string_lossy()), "workspace--myrepo");
+    }
+
+    #[test]
+    fn slug_of_a_worktree_with_a_relative_gitdir_resolves() {
+        // git writes relative paths with `worktree.useRelativePaths`.
+        let (_dir, _repo, worktree) = repo_with_worktree("workspace/myrepo-wt", |_| {
+            "gitdir: ../myrepo/.git/worktrees/wt\n".to_string()
+        });
+        assert_eq!(
+            slug_from_input(&worktree.to_string_lossy()),
+            "workspace--myrepo"
+        );
+    }
+
+    #[test]
+    fn slug_of_a_submodule_or_unreadable_git_file_stays_its_own_path() {
+        // Negative control: a `.git` file that is not a linked worktree keeps
+        // the directory's own identity, as before.
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("parent").join("vendored");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join(".git"), "gitdir: ../.git/modules/vendored\n").unwrap();
+        assert_eq!(slug_from_input(&sub.to_string_lossy()), "parent--vendored");
+
+        std::fs::write(sub.join(".git"), "not a gitdir line\n").unwrap();
+        assert_eq!(slug_from_input(&sub.to_string_lossy()), "parent--vendored");
     }
 
     #[test]
