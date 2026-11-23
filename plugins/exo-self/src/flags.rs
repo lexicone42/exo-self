@@ -264,24 +264,34 @@ pub fn session_section(flags: &[Flag], max_shown: usize) -> String {
 /// `exo-self flag list`
 pub fn run_list(all: bool) -> u8 {
     let paths = ExoPaths::new();
-    let acked = load_acked(&paths);
-    let flags = scan(&paths);
-    let mut shown = 0;
-    for flag in &flags {
-        let is_acked = acked.contains_key(&flag.id);
-        if is_acked && !all {
+    println!("{}", list_text(&paths, all));
+    0
+}
+
+/// What `flag list` prints. Listing counts as a scan, so it also refreshes the
+/// status-line count.
+pub fn list_text(paths: &ExoPaths, all: bool) -> String {
+    let open_ids: Vec<String> = open(paths).into_iter().map(|f| f.id).collect();
+    let mut out = Vec::new();
+    for flag in scan(paths) {
+        let is_open = open_ids.contains(&flag.id);
+        if !is_open && !all {
             continue;
         }
-        shown += 1;
-        let state = if is_acked { " [acked]" } else { "" };
-        println!("{}{state}  {}/{}", flag.id, flag.project, flag.file);
-        println!("  {}", one_line(&flag.text, 600));
-        println!();
+        let state = if is_open { "" } else { " [acked]" };
+        out.push(format!(
+            "{}{state}  {}/{}\n  {}\n",
+            flag.id,
+            flag.project,
+            flag.file,
+            one_line(&flag.text, 600)
+        ));
     }
-    if shown == 0 {
-        println!("No open flags.");
+    if out.is_empty() {
+        "No open flags.".to_string()
+    } else {
+        out.join("\n").trim_end().to_string()
     }
-    0
 }
 
 /// `exo-self flag ack <id>`
@@ -522,5 +532,34 @@ mod tests {
         assert_eq!(statusline_marker(0), "");
         assert!(statusline_marker(1).contains("\u{2691} 1 flag\x1b"));
         assert!(statusline_marker(3).contains("\u{2691} 3 flags"));
+    }
+    #[test]
+    fn listing_refreshes_the_status_line_count_and_marks_acked_flags() {
+        let (_d, paths) = paths_with(&[(
+            "p",
+            "a.md",
+            "**Flag** \u{2014} one.\n\n**Flag** \u{2014} two.\n",
+        )]);
+        assert_eq!(last_open_count(&paths), 0);
+
+        let text = list_text(&paths, false);
+        assert!(text.contains("one.") && text.contains("two."));
+        // The regression: listing found flags and left the count unwritten.
+        assert_eq!(last_open_count(&paths), 2);
+
+        let first = open(&paths)[0].id.clone();
+        ack(&paths, &first).unwrap();
+        let open_only = list_text(&paths, false);
+        assert!(!open_only.contains(&first));
+        let everything = list_text(&paths, true);
+        assert!(everything.contains(&format!("{first} [acked]")));
+        assert_eq!(last_open_count(&paths), 1);
+    }
+
+    #[test]
+    fn listing_nothing_says_so() {
+        let (_d, paths) = paths_with(&[("p", "a.md", "no flags\n")]);
+        assert_eq!(list_text(&paths, false), "No open flags.");
+        assert_eq!(list_text(&paths, true), "No open flags.");
     }
 }
