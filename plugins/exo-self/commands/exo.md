@@ -1,6 +1,6 @@
 ---
 description: View and manage your exo-self — cognitive ecology across sessions
-argument-hint: "[view|write|history|reset|export|import|synthesize|digest|indicators|flags|ack]"
+argument-hint: "[view|write|history|reset|export|import|synthesize|digest|indicators|flags|ack|remind]"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Task"]
 ---
 
@@ -196,6 +196,17 @@ Acknowledge a flag: `/exo ack <id>`.
 1. Only do this when the user has said the flag is dealt with or no longer matters. Acknowledging is the user's decision.
 2. Run `~/.claude/bin/exo-self flag ack <id>`. A unique prefix of the id is enough.
 3. The note that raised the flag is not changed. The acknowledgement is recorded in `~/.claude/exo-self/flags-acked.json` with the time and the flag's text.
+
+### `remind`
+
+Manage the reminders the user wants from every session: `/exo remind [text]`.
+
+These live in `~/.claude/exo-self/user-reminders.md`. Session start and the post-compaction reload show the file to every session, which says a reminder to the user when its moment comes up.
+
+1. With no text: read the file and show the user its reminders.
+2. With text: add it to the file as one list item. Phrase it as a moment and what to say then, e.g. `- When I give an open-ended go-ahead: ask whether I am stepping away.` Confirm the wording with the user before writing.
+3. To change or remove one, edit the file as the user directs.
+4. The reminders are the user's. Do not add, reword or remove one on your own initiative. Lines inside `<!-- -->` are not shown to sessions.
 
 ### `synthesize`
 

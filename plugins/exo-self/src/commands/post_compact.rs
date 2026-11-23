@@ -77,6 +77,12 @@ pub fn run() {
         );
     }
 
+    // Reminders the user asked for: repeated here because they must outlast compaction.
+    let reminders_section = crate::reminders::section(&paths);
+    if !reminders_section.is_empty() {
+        sections.push(reminders_section);
+    }
+
     // Load handoff
     let handoff = load_handoff(&paths, session_id);
     if !handoff.is_empty() {

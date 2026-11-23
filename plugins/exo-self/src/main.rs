@@ -11,6 +11,7 @@ mod markdown;
 mod meta;
 mod paths;
 mod project;
+mod reminders;
 mod scaling;
 mod state;
 mod traces;

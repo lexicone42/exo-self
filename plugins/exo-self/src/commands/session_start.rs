@@ -333,6 +333,12 @@ pub fn run() {
     // session turns to the user's task, and went unacted on for months (#24). The
     // context monitor makes it at the first checkpoint instead.
 
+    // Reminders the user asked every session to give them.
+    let reminders_section = crate::reminders::section(&paths);
+    if !reminders_section.is_empty() {
+        sections.push(reminders_section);
+    }
+
     // Open flags: concerns earlier sessions raised for the user, from any project (#25).
     let flags_section = crate::flags::session_section(&crate::flags::open(&paths), 10);
     if !flags_section.is_empty() {
