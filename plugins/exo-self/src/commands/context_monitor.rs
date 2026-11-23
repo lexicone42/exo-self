@@ -123,7 +123,12 @@ pub fn run() {
     // Time-based reflection nudge for 1M context windows.
     // When context is plentiful, the percentage-based triggers may never fire.
     // This ensures the reflective layer doesn't go silent during long sessions.
-    if output_msg.is_none() && !already_reflecting && state.session_start > 0.0 {
+    //
+    // Not gated on `already_reflecting`: that is true for the rest of a session
+    // once its suggested note has any prose, so a session that wrote one note
+    // early never saw a time checkpoint again, however long it ran. The
+    // cooldown below is what keeps a checkpoint from following a fresh note.
+    if output_msg.is_none() && state.session_start > 0.0 {
         let now = state::now();
         let elapsed_min = ((now - state.session_start) / 60.0) as u32;
         let min_since_note =
