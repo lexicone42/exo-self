@@ -46,8 +46,9 @@ fn pending_path(paths: &ExoPaths, session_id: &str) -> PathBuf {
     dir(paths).join(format!("{session_id}.jsonl"))
 }
 
-fn delivered_path(paths: &ExoPaths, session_id: &str) -> PathBuf {
-    dir(paths).join(format!("{session_id}.delivered.jsonl"))
+/// How many bytes of a session's file have already been shown to it.
+fn offset_path(paths: &ExoPaths, session_id: &str) -> PathBuf {
+    dir(paths).join(format!("{session_id}.offset"))
 }
 
 /// Record one observation for `session_id`.
@@ -97,43 +98,50 @@ fn parse(content: &str) -> Vec<Observation> {
         .collect()
 }
 
+/// The undelivered part of a session's file: everything after the recorded
+/// offset, up to the last complete line. Returns the observations and the
+/// offset that would mark them delivered.
+fn undelivered(paths: &ExoPaths, session_id: &str) -> (Vec<Observation>, usize) {
+    let Ok(bytes) = std::fs::read(pending_path(paths, session_id)) else {
+        return (Vec::new(), 0);
+    };
+    let offset = std::fs::read_to_string(offset_path(paths, session_id))
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|o| *o <= bytes.len())
+        .unwrap_or(0);
+    // A line still being written has no newline yet: leave it for next time.
+    let end = bytes[offset..]
+        .iter()
+        .rposition(|b| *b == b'\n')
+        .map_or(offset, |i| offset + i + 1);
+    let text = String::from_utf8_lossy(&bytes[offset..end]);
+    (parse(&text), end)
+}
+
 /// Observations waiting for `session_id`, without marking them delivered.
 pub fn pending(paths: &ExoPaths, session_id: &str) -> Vec<Observation> {
     if !valid_session(session_id) {
         return Vec::new();
     }
-    std::fs::read_to_string(pending_path(paths, session_id))
-        .map(|c| parse(&c))
-        .unwrap_or_default()
+    undelivered(paths, session_id).0
 }
 
 /// Take the observations waiting for `session_id` and mark them delivered.
 ///
-/// The pending file is renamed before it is read, so an agent that records
-/// while this runs writes to a fresh pending file and is delivered next time.
-/// What was taken is appended to a delivered log and not thrown away.
+/// The file is append-only and is never moved or rewritten, so an agent that
+/// is recording while this runs cannot lose its line: delivery is a byte
+/// offset, and anything appended after the offset is delivered next time.
+/// The file itself is the record of everything that was said.
 pub fn take(paths: &ExoPaths, session_id: &str) -> Vec<Observation> {
     if !valid_session(session_id) {
         return Vec::new();
     }
-    let pending = pending_path(paths, session_id);
-    if !pending.is_file() {
-        return Vec::new();
+    let (observations, end) = undelivered(paths, session_id);
+    if !observations.is_empty() || end > 0 {
+        let _ = std::fs::write(offset_path(paths, session_id), end.to_string());
     }
-    let taking = dir(paths).join(format!("{session_id}.taking.{}", std::process::id()));
-    if std::fs::rename(&pending, &taking).is_err() {
-        return Vec::new();
-    }
-    let content = std::fs::read_to_string(&taking).unwrap_or_default();
-    if let Ok(mut log) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(delivered_path(paths, session_id))
-    {
-        let _ = log.write_all(content.as_bytes());
-    }
-    let _ = std::fs::remove_file(&taking);
-    parse(&content)
+    observations
 }
 
 /// The block shown to the parent session, or an empty string for none.
@@ -158,7 +166,7 @@ pub fn section(observations: &[Observation]) -> String {
     }
     if observations.len() > MAX_SHOWN {
         lines.push(format!(
-            "- and {} more in the delivered log under `~/.claude/exo-self/observations/`",
+            "- and {} more in this session's file under `~/.claude/exo-self/observations/`",
             observations.len() - MAX_SHOWN
         ));
     }
@@ -211,6 +219,7 @@ pub fn run_observe(session: Option<String>, agent: Option<String>, words: Vec<St
 }
 
 /// `exo-self observations <session>`: print what is waiting and mark it delivered.
+/// The session's `.jsonl` file keeps every observation, delivered or not.
 pub fn run_observations(session: &str, peek: bool) -> u8 {
     let paths = ExoPaths::new();
     let observations = if peek {
@@ -262,7 +271,7 @@ mod tests {
         // Delivered once: nothing is waiting afterwards, and nothing was lost.
         assert!(take(&p, "parent-1").is_empty());
         assert!(pending(&p, "parent-1").is_empty());
-        let log = std::fs::read_to_string(delivered_path(&p, "parent-1")).unwrap();
+        let log = std::fs::read_to_string(pending_path(&p, "parent-1")).unwrap();
         assert_eq!(parse(&log), taken);
     }
 
@@ -300,11 +309,23 @@ mod tests {
     fn empty_text_is_refused_and_long_text_is_cut_at_a_word() {
         let (_d, p) = paths();
         assert!(record(&p, "s", "", "/w", "  \n ").is_err());
-        let long = "word ".repeat(600);
+        // Seven bytes a unit, so the 1200-byte cut lands inside a word.
+        let long = "sixsix ".repeat(400);
+        assert_ne!(MAX_TEXT % 7, 0);
         record(&p, "s", "", "/w", &long).unwrap();
-        let text = &take(&p, "s")[0].text;
+        let text = take(&p, "s")[0].text.clone();
         assert!(text.len() <= MAX_TEXT + " [truncated]".len());
-        assert!(text.ends_with("word [truncated]"));
+        assert!(
+            text.ends_with("sixsix [truncated]"),
+            "{}",
+            &text[text.len() - 30..]
+        );
+
+        // A multi-byte character at the cut is not split.
+        let accents = "\u{e9}".repeat(1000);
+        record(&p, "s", "", "/w", &accents).unwrap();
+        let text = take(&p, "s")[0].text.clone();
+        assert!(text.ends_with("\u{e9} [truncated]"));
     }
 
     #[test]
@@ -341,5 +362,48 @@ mod tests {
     fn the_instruction_carries_the_parents_session_id() {
         let text = instruction("ccff8de5-370f-454e-9c45-2d4c1e0b0453");
         assert!(text.contains("observe --session ccff8de5-370f-454e-9c45-2d4c1e0b0453 "));
+    }
+    #[test]
+    fn a_line_still_being_written_is_left_for_the_next_delivery() {
+        let (_d, p) = paths();
+        record(&p, "s", "", "/w", "complete").unwrap();
+        // A writer has started a second line and not finished it.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(pending_path(&p, "s"))
+            .unwrap();
+        f.write_all(br#"{"at":"t","agent":"","cwd":"/w","text":"half"#)
+            .unwrap();
+
+        let first = take(&p, "s");
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].text, "complete");
+
+        // The writer finishes. The line is delivered whole, once.
+        f.write_all(b" done\"}\n").unwrap();
+        let second = take(&p, "s");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].text, "half done");
+        assert!(take(&p, "s").is_empty());
+    }
+
+    #[test]
+    fn peeking_at_a_long_list_points_at_the_file_that_holds_it() {
+        let (_d, p) = paths();
+        for i in 0..14 {
+            record(&p, "s", "", "/w", &format!("observation {i}")).unwrap();
+        }
+        let block = section(&pending(&p, "s"));
+        assert!(block.contains("and 2 more in this session's file"));
+        // Peeking consumed nothing.
+        assert_eq!(take(&p, "s").len(), 14);
+    }
+
+    #[test]
+    fn a_stale_offset_past_the_end_of_the_file_does_not_hide_observations() {
+        let (_d, p) = paths();
+        record(&p, "s", "", "/w", "kept").unwrap();
+        std::fs::write(offset_path(&p, "s"), "999999").unwrap();
+        assert_eq!(take(&p, "s").len(), 1);
     }
 }

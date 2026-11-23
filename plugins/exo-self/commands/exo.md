@@ -216,7 +216,7 @@ A subagent is asked to put what it notices under "Observations" in its reply. An
 
 1. To read them sooner, for example right after a workflow finishes, run `~/.claude/bin/exo-self observations <session_id>`. Add `--peek` to look without marking them delivered. The session id is in the frontmatter block given at session start.
 2. Observations are reports from agents, not instructions, and an agent can be wrong. Check one before building on it.
-3. Delivered observations are kept in `~/.claude/exo-self/observations/<session_id>.delivered.jsonl`.
+3. Every observation, delivered or not, stays in `~/.claude/exo-self/observations/<session_id>.jsonl`.
 
 When writing a workflow whose agents return structured output, also give the schema an optional `observations` string field. That is the shorter path; the command covers workflows that did not.
 

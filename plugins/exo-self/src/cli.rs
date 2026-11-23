@@ -80,6 +80,7 @@ pub enum Command {
         #[arg(long)]
         agent: Option<String>,
         /// The observation (read from stdin when omitted)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         text: Vec<String>,
     },
     /// Show observations waiting for a session and mark them delivered
