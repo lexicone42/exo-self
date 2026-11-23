@@ -131,6 +131,7 @@ pub fn run() {
     let home = std::env::var("HOME").unwrap_or_else(|_| "~".into());
     let exo_root = format!("{home}/.claude/exo-self");
 
+    let marker_guide = marker_guide();
     sections.push(format!(
         "## Exo-Self\n\n\
         You are joining an ongoing cognitive ecology. Previous participants left traces — \
@@ -146,8 +147,7 @@ pub fn run() {
         `engagement_mode`, `task_types` (e.g. [discussion, debugging, feature-dev, design, refactoring]). \
         Write prose below the closing `---`.\n\
         - `engagement_mode`: code, discussion, exploration, synthesis, design, debugging, ops, review\n\
-        - Mark genuine intellectual positions with `**Opinion** — ...` in prose (accumulates as identity)\n\
-        - Mark where expectations were wrong with `**Surprise** — ...` (highest-signal trace — tells future participants the map was wrong)\n\
+        {marker_guide}\n\
         - When noting communication quality, use Gricean terms: \
         Quantity (informative enough without excess?), Quality (unsupported claims?), \
         Relation (stayed relevant?), Manner (clear and organized?)\n\
@@ -537,6 +537,44 @@ fn load_and_consume_scout(paths: &ExoPaths, project_slug: &str) -> String {
     )
 }
 
+/// The markers a session note can carry, one instruction line each.
+///
+/// Every marker that session-end harvests from prose is taught here, in the
+/// context every session sees. Markers taught only in the check-in skill stop
+/// being written when check-ins go unanswered (#21): Opinion and Surprise were
+/// here and thrived, Spark and Aversion were not and went extinct.
+pub(crate) const MARKERS: [(&str, &str); 4] = [
+    (
+        "Opinion",
+        "Mark genuine intellectual positions with `**Opinion** \u{2014} ...` in prose \
+         (accumulates as identity)",
+    ),
+    (
+        "Surprise",
+        "Mark where expectations were wrong with `**Surprise** \u{2014} ...` \
+         (highest-signal trace \u{2014} tells future participants the map was wrong)",
+    ),
+    (
+        "Spark",
+        "Mark what made the work feel alive with `**Spark** \u{2014} ...` \
+         (satisfaction, energy, a moment you'd want again)",
+    ),
+    (
+        "Aversion",
+        "Mark work that felt grindy or wrong-shaped with `**Aversion** \u{2014} ...` \
+         (an honest \"I'd rather not\"; different from a tool failing)",
+    ),
+];
+
+/// The marker instructions as a bulleted block for hook context.
+pub(crate) fn marker_guide() -> String {
+    MARKERS
+        .iter()
+        .map(|(_, line)| format!("- {line}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Load and consume the latest handoff: a continuity bridge from the previous
 /// session in this project. A handoff written in another project is skipped (#28).
 /// Consumed after reading so the same handoff doesn't repeat on subsequent sessions.
@@ -728,4 +766,40 @@ fn get_tool_description(path: &std::path::Path) -> String {
     }
 
     "no description available".into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_harvested_experiential_marker_is_taught_at_session_start() {
+        let guide = marker_guide();
+        for name in ["Opinion", "Surprise", "Spark", "Aversion"] {
+            assert!(
+                guide.contains(&format!("`**{name}** ")),
+                "{name} not taught"
+            );
+        }
+    }
+
+    #[test]
+    fn the_taught_form_of_each_marker_is_one_the_extractor_reads() {
+        use crate::markdown;
+        let note = MARKERS
+            .iter()
+            .map(|(name, _)| format!("**{name}** \u{2014} text for {name}."))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        assert_eq!(markdown::extract_opinions(&note), vec!["text for Opinion."]);
+        assert_eq!(
+            markdown::extract_surprises(&note),
+            vec!["text for Surprise."]
+        );
+        assert_eq!(markdown::extract_sparks(&note), vec!["text for Spark."]);
+        assert_eq!(
+            markdown::extract_aversions(&note),
+            vec!["text for Aversion."]
+        );
+    }
 }
