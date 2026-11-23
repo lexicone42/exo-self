@@ -1,7 +1,9 @@
 use crate::commands::extract_handoff;
+use crate::handoff;
 use crate::hook_io::{self, HookInput};
 use crate::meta::Meta;
 use crate::paths::ExoPaths;
+use crate::project;
 use crate::state::{self, SessionState};
 
 pub fn run() {
@@ -13,18 +15,14 @@ pub fn run() {
 
     // Step 1: Automatic handoff extraction from transcript
     if !input.transcript_path.is_empty() && std::fs::metadata(&input.transcript_path).is_ok() {
-        let handoff_name = if session_id.is_empty() {
-            "latest".to_string()
-        } else {
-            session_id.clone()
-        };
-        let handoff_file = paths.handoff_file(&handoff_name);
-
         let content = extract_handoff::extract(&input.transcript_path, 3000);
         if !content.is_empty() {
-            let _ = std::fs::write(&handoff_file, &content);
-            // Also save as "latest"
-            let _ = std::fs::write(paths.handoffs_dir.join("latest.md"), &content);
+            if !session_id.is_empty() {
+                let _ = std::fs::write(paths.handoff_file(session_id), &content);
+            }
+            // The bridge to this project's next session, marked with where it came from.
+            let project_slug = project::slug_from_input(&input.cwd);
+            handoff::write_latest(&paths, session_id, &project_slug, &content);
         }
     }
 

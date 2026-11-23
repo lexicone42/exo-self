@@ -4,6 +4,7 @@ mod cli;
 mod commands;
 mod config;
 mod context_window;
+mod handoff;
 mod hook_io;
 mod markdown;
 mod meta;
