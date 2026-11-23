@@ -52,7 +52,13 @@ impl HookInput {
             Some(other) => other.to_string(),
         };
         let mut input = Self {
-            session_id: text("session_id"),
+            // An id is used in file names, so only a string is taken as one. A
+            // value of any other type is left empty and the transcript name
+            // below supplies the id.
+            session_id: match map.get("session_id") {
+                Some(Value::String(s)) => s.clone(),
+                _ => String::new(),
+            },
             cwd: text("cwd"),
             transcript_path: text("transcript_path"),
             trigger: text("trigger"),
@@ -61,10 +67,11 @@ impl HookInput {
             tool_name: text("tool_name"),
             tool_input: map.get("tool_input").cloned().unwrap_or(Value::Null),
             error: text("error"),
-            stop_hook_active: map
-                .get("stop_hook_active")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            stop_hook_active: match map.get("stop_hook_active") {
+                Some(Value::Bool(b)) => *b,
+                Some(Value::String(s)) => s.eq_ignore_ascii_case("true"),
+                _ => false,
+            },
             agent_type: text("agent_type"),
             effort: text("effort"),
         };
@@ -223,6 +230,34 @@ mod tests {
         // Graceful degradation: hosts/events without the field must not break parsing.
         let hi = HookInput::parse(r#"{"session_id":"s"}"#);
         assert_eq!(hi.effort, "");
+    }
+
+    #[test]
+    fn a_session_id_of_the_wrong_type_falls_back_to_the_transcript_name() {
+        for raw in [
+            r#"{"session_id":{"id":"a/b"},"transcript_path":"/p/ccff8de5.jsonl"}"#,
+            r#"{"session_id":123,"transcript_path":"/p/ccff8de5.jsonl"}"#,
+            r#"{"session_id":[],"transcript_path":"/p/ccff8de5.jsonl"}"#,
+            r#"{"session_id":null,"transcript_path":"/p/ccff8de5.jsonl"}"#,
+        ] {
+            assert_eq!(HookInput::parse(raw).session_id, "ccff8de5", "{raw}");
+        }
+        // With no transcript either, the id is empty, never JSON text.
+        assert_eq!(
+            HookInput::parse(r#"{"session_id":{"id":"x"}}"#).session_id,
+            ""
+        );
+    }
+
+    #[test]
+    fn stop_hook_active_is_read_as_a_bool_or_the_word_true() {
+        let flag = |raw: &str| HookInput::parse(raw).stop_hook_active;
+        assert!(flag(r#"{"stop_hook_active":true}"#));
+        assert!(flag(r#"{"stop_hook_active":"true"}"#));
+        assert!(!flag(r#"{"stop_hook_active":false}"#));
+        assert!(!flag(r#"{"stop_hook_active":"false"}"#));
+        assert!(!flag(r#"{"stop_hook_active":"yes"}"#));
+        assert!(!flag(r#"{}"#));
     }
 }
 

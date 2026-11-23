@@ -111,13 +111,22 @@ pub fn run() {
     } else {
         session_id.as_str()
     };
+    // Only what was written since the last harvest. A session resumed over
+    // months would otherwise re-gather every note at each exit.
+    let harvest_since = if state.last_harvest_at > 0.0 {
+        state.last_harvest_at
+    } else {
+        session_start
+    };
     let other_prose = project::other_session_prose(
         &paths,
         &state.project_slug,
         harvest_sid,
-        session_start,
+        harvest_since,
         &state.session_notes_path,
     );
+    state.last_harvest_at = state::now();
+    state.save(&paths);
     let harvest_text = match (prose_content.trim().is_empty(), other_prose.is_empty()) {
         (_, true) => prose_content.clone(),
         (true, false) => other_prose,

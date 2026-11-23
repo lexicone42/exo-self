@@ -57,6 +57,10 @@ pub struct SessionState {
     // The digest suggestion is made once per session, at the first checkpoint (#24).
     pub digest_hint_fired: bool,
 
+    // When session-end last gathered markers from this session's notes. A
+    // resumed session gathers only what was written after this.
+    pub last_harvest_at: f64,
+
     // Reasoning-effort level captured from hook input when present (e.g. "xhigh").
     // Empty when the host doesn't supply it — an additive welfare/intensity signal.
     pub effort: String,
@@ -101,6 +105,7 @@ impl Default for SessionState {
             scouted: false,
             time_nudge_count: 0,
             digest_hint_fired: false,
+            last_harvest_at: 0.0,
             effort: String::new(),
             serving_model: String::new(),
         }

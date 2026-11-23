@@ -32,14 +32,23 @@ pub fn write_trace(
     let ts_front = now.format("%Y-%m-%dT%H:%M:%S%.6f").to_string();
 
     // Short slugs for filename (avoid overly long names)
-    let proj_short = if project.len() > 30 {
-        &project[project.len() - 30..]
-    } else {
-        project
+    let proj_short: String = {
+        let chars: Vec<char> = project.chars().collect();
+        chars[chars.len().saturating_sub(30)..].iter().collect()
     };
-    let sid_short = &session_id[..session_id.len().min(8)];
+    let sid_short: String = session_id.chars().take(8).collect();
 
-    let filename = format!("{trace_type}--{ts_file}--{proj_short}--{sid_short}.md");
+    // The timestamp has one-second resolution and several markers of one type
+    // are written in a loop at session end, so the text is part of the name.
+    // Without it each trace overwrote the one before and only the last survived.
+    let mut text_hash: u32 = 0x811c_9dc5;
+    for byte in text.bytes() {
+        text_hash ^= u32::from(byte);
+        text_hash = text_hash.wrapping_mul(0x0100_0193);
+    }
+
+    let filename =
+        format!("{trace_type}--{ts_file}--{proj_short}--{sid_short}--{text_hash:08x}.md");
 
     let mut frontmatter = format!(
         "---\ntype: \"{trace_type}\"\nproject: \"{project}\"\ntimestamp: \"{ts_front}\"\nsession_id: \"{session_id}\""
@@ -224,5 +233,36 @@ mod tests {
         assert_eq!(traces[0].text, "First");
         assert_eq!(traces[1].text, "Second");
         assert_eq!(traces[2].text, "Third");
+    }
+    #[test]
+    fn several_traces_written_in_one_second_are_all_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        for text in ["first spark", "second spark", "third spark"] {
+            write_trace(
+                dir.path(),
+                "spark",
+                text,
+                "workspace--p",
+                "ccff8de5-0000",
+                None,
+            );
+        }
+        let mut bodies: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| std::fs::read_to_string(e.path()).unwrap())
+            .collect();
+        bodies.sort();
+        assert_eq!(bodies.len(), 3);
+        assert!(bodies.iter().any(|b| b.ends_with("first spark\n")));
+        assert!(bodies.iter().any(|b| b.ends_with("third spark\n")));
+    }
+
+    #[test]
+    fn a_long_or_non_ascii_project_name_does_not_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = "\u{e9}".repeat(40);
+        write_trace(dir.path(), "opinion", "text", &project, "s", None);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 }
