@@ -117,16 +117,37 @@ pub fn take_latest(paths: &ExoPaths, project_slug: &str) -> Latest {
     Latest::Handoff { origin, body }
 }
 
+/// How old a session's own handoff may be and still describe what it is doing.
+///
+/// The handoff is rewritten at each compaction and session end. A session on a
+/// large window can go months without either, and its subagents were then told
+/// the session was doing whatever it had been doing at the last one: in one
+/// case a sentence from eight months earlier.
+const MAX_DIRECTION_AGE_SECS: u64 = 6 * 60 * 60;
+
+fn is_recent(path: &std::path::Path, max_age_secs: u64) -> bool {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_some_and(|age| age.as_secs() <= max_age_secs)
+}
+
 /// The "Working Direction" of this session's own handoff, for its subagents.
 ///
-/// Reads `handoffs/<session_id>.md` and nothing else. With no session id, or no
-/// handoff yet for this session, the subagent gets no handoff text: another
-/// session's is never a substitute.
+/// Reads `handoffs/<session_id>.md` and nothing else. With no session id, no
+/// handoff yet for this session, or one too old to describe the present, the
+/// subagent gets no handoff text: another session's is never a substitute, and
+/// neither is this session's distant past.
 pub fn session_direction(paths: &ExoPaths, session_id: &str, max_chars: usize) -> String {
     if session_id.is_empty() || session_id.contains(['/', '\\']) || session_id == "latest" {
         return String::new();
     }
-    let Ok(content) = std::fs::read_to_string(paths.handoff_file(session_id)) else {
+    let path = paths.handoff_file(session_id);
+    if !is_recent(&path, MAX_DIRECTION_AGE_SECS) {
+        return String::new();
+    }
+    let Ok(content) = std::fs::read_to_string(&path) else {
         return String::new();
     };
     let (_, body) = split_origin(&content);
@@ -346,5 +367,28 @@ mod tests {
         write_latest(&p, "s", "p", "  \n");
         assert_eq!(take_latest(&p, "p"), Latest::None);
         assert!(!p.handoffs_dir.join("latest.md").exists());
+    }
+    #[test]
+    fn a_handoff_from_long_ago_is_not_the_sessions_current_direction() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths(dir.path());
+        let file = p.handoff_file("session-a");
+        std::fs::write(
+            &file,
+            "## Working Direction\n\nBuilt and installed. Restart to see the status line.\n",
+        )
+        .unwrap();
+        // Fresh: shown.
+        assert!(session_direction(&p, "session-a", 400).starts_with("Built and installed"));
+
+        // The same file, last written seven hours ago: not shown.
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(7 * 60 * 60);
+        std::fs::File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert_eq!(session_direction(&p, "session-a", 400), "");
     }
 }
