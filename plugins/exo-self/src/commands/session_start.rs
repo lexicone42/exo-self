@@ -21,10 +21,7 @@ pub fn run() {
         input.session_id.clone()
     };
 
-    // Write fresh state for this session
-    let mut state = SessionState::default();
-    state.session_id = session_id.clone();
-    state.session_start = state::now();
+    let mut state = initial_state(&paths, &session_id, &input.source);
     state.project_cwd = if !input.cwd.is_empty() {
         input.cwd.clone()
     } else {
@@ -521,6 +518,27 @@ fn load_and_consume_scout(paths: &ExoPaths, project_slug: &str) -> String {
     )
 }
 
+/// The state a session starts with.
+///
+/// A new or cleared session starts from nothing. A resumed session keeps what
+/// it had: SessionStart also fires on resume, and writing a fresh state there
+/// zeroed the failure, task and compaction counts and restarted the clock each
+/// time a long-running session was reopened, so a session that had compacted a
+/// dozen times reported none.
+fn initial_state(paths: &ExoPaths, session_id: &str, source: &str) -> SessionState {
+    if source == "resume" && paths.state_file(session_id).is_file() {
+        let state = SessionState::load(paths, session_id);
+        if state.session_start > 0.0 {
+            return state;
+        }
+    }
+    SessionState {
+        session_id: session_id.to_string(),
+        session_start: state::now(),
+        ..SessionState::default()
+    }
+}
+
 /// The markers a session note can carry, one instruction line each.
 ///
 /// Every marker that session-end harvests from prose is taught here, in the
@@ -804,5 +822,48 @@ mod tests {
         );
         // The guide quotes the syntax in code, which must not itself be a flag.
         assert!(crate::markdown::extract_flags(&guide).is_empty());
+    }
+    #[test]
+    fn a_resumed_session_keeps_its_counters_and_clock() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let mut earlier = initial_state(&paths, "s1", "startup");
+        earlier.session_start -= 7200.0;
+        earlier.tool_failures = 4;
+        earlier.task_completions = 9;
+        earlier.compactions = 12;
+        earlier.save(&paths);
+
+        let resumed = initial_state(&paths, "s1", "resume");
+        assert_eq!(resumed.tool_failures, 4);
+        assert_eq!(resumed.task_completions, 9);
+        assert_eq!(resumed.compactions, 12);
+        assert_eq!(resumed.session_start, earlier.session_start);
+    }
+
+    #[test]
+    fn startup_and_clear_start_from_nothing_even_with_a_state_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let mut earlier = initial_state(&paths, "s1", "startup");
+        earlier.tool_failures = 4;
+        earlier.save(&paths);
+
+        for source in ["startup", "clear", ""] {
+            let state = initial_state(&paths, "s1", source);
+            assert_eq!(state.tool_failures, 0, "{source}");
+            assert_eq!(state.session_id, "s1");
+            assert!(state.session_start > 0.0);
+        }
+    }
+
+    #[test]
+    fn a_resume_with_no_state_file_starts_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let state = initial_state(&paths, "never-seen", "resume");
+        assert_eq!(state.session_id, "never-seen");
+        assert_eq!(state.compactions, 0);
+        assert!(state.session_start > 0.0);
     }
 }
