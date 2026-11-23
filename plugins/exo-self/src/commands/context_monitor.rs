@@ -116,34 +116,17 @@ pub fn run() {
     // When context is plentiful, the percentage-based triggers may never fire.
     // This ensures the reflective layer doesn't go silent during long sessions.
     if output_msg.is_none() && !already_reflecting && state.session_start > 0.0 {
-        let elapsed_min = ((state::now() - state.session_start) / 60.0) as u32;
-        // Nudge at 60 min, then every 90 min after (120, 210, 300, ...)
-        let first_nudge_min = 60u32;
-        let repeat_interval = 90u32;
-        let should_nudge = if elapsed_min >= first_nudge_min {
-            if !state.nudge_fired {
-                true
-            } else {
-                // Check if we've passed a repeat boundary since last time-nudge
-                let intervals_passed = (elapsed_min - first_nudge_min) / repeat_interval + 1;
-                let last_intervals = if state.time_nudge_count > 0 {
-                    state.time_nudge_count
-                } else {
-                    0
-                };
-                intervals_passed > last_intervals
+        let now = state::now();
+        let elapsed_min = ((now - state.session_start) / 60.0) as u32;
+        let min_since_note =
+            project::newest_note_mtime(&paths, &slug).map(|mtime| (now - mtime) / 60.0);
+        match time_checkpoint(elapsed_min, state.time_nudge_count, min_since_note, &cfg) {
+            TimeCheckpoint::NotDue => {}
+            TimeCheckpoint::Skip(index) => state.time_nudge_count = index,
+            TimeCheckpoint::Fire(index) => {
+                state.time_nudge_count = index;
+                output_msg = Some(time_nudge_msg(elapsed_min, &slug));
             }
-        } else {
-            false
-        };
-
-        if should_nudge {
-            state.time_nudge_count = if elapsed_min >= first_nudge_min {
-                (elapsed_min - first_nudge_min) / repeat_interval + 1
-            } else {
-                0
-            };
-            output_msg = Some(time_nudge_msg(elapsed_min, &slug));
         }
     }
 
@@ -188,6 +171,53 @@ pub fn run() {
         hook_io::hook_output("UserPromptSubmit", &msg);
     } else {
         hook_io::empty_output();
+    }
+}
+
+/// What to do about the time-based checkpoint on this prompt.
+#[derive(Debug, PartialEq, Eq)]
+enum TimeCheckpoint {
+    /// No new checkpoint boundary has passed.
+    NotDue,
+    /// A boundary passed, but a note was written recently: count it as done, say nothing.
+    Skip(u32),
+    /// A boundary passed: emit the checkpoint.
+    Fire(u32),
+}
+
+/// Decide the time-based checkpoint. Checkpoints fall at `first`, `first + interval`,
+/// `first + 2 * interval`, ... minutes; `already_handled` is how many of those
+/// boundaries this session has already fired or skipped.
+///
+/// Each boundary is handled once. An earlier version also fired whenever the
+/// context-percentage nudge had not fired yet, which on a large window is every
+/// prompt after the first hour.
+///
+/// A boundary is skipped when a session note for the project was written within
+/// the cooldown (#26): the session has just reflected, and a checkpoint with
+/// nothing new to say gets a thin entry or none.
+fn time_checkpoint(
+    elapsed_min: u32,
+    already_handled: u32,
+    min_since_note: Option<f64>,
+    cfg: &Config,
+) -> TimeCheckpoint {
+    if elapsed_min < cfg.time_nudge_first_min {
+        return TimeCheckpoint::NotDue;
+    }
+    // With repeats off (interval 0) only the first boundary exists.
+    let boundaries_passed = (elapsed_min - cfg.time_nudge_first_min)
+        .checked_div(cfg.time_nudge_interval_min)
+        .map_or(1, |n| n + 1);
+    if boundaries_passed <= already_handled {
+        return TimeCheckpoint::NotDue;
+    }
+    let in_cooldown = cfg.checkpoint_cooldown_min > 0
+        && min_since_note.is_some_and(|m| m >= 0.0 && m < f64::from(cfg.checkpoint_cooldown_min));
+    if in_cooldown {
+        TimeCheckpoint::Skip(boundaries_passed)
+    } else {
+        TimeCheckpoint::Fire(boundaries_passed)
     }
 }
 
@@ -295,4 +325,139 @@ fn reserve_reminder(usage_pct: u32, source: &str, slug: &str) -> String {
         is authoritative. Just a good moment to make sure your traces are written to \
         {target}: what should future participants find from this session?"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg() -> Config {
+        Config::default()
+    }
+
+    #[test]
+    fn nothing_is_due_before_the_first_boundary() {
+        assert_eq!(time_checkpoint(0, 0, None, &cfg()), TimeCheckpoint::NotDue);
+        assert_eq!(time_checkpoint(59, 0, None, &cfg()), TimeCheckpoint::NotDue);
+    }
+
+    #[test]
+    fn each_boundary_fires_once() {
+        // 60 min, then every 90: boundaries at 60, 150, 240.
+        assert_eq!(
+            time_checkpoint(60, 0, None, &cfg()),
+            TimeCheckpoint::Fire(1)
+        );
+        // The regression: with boundary 1 handled, later prompts in the same
+        // interval say nothing, whatever the context-percentage nudge did.
+        assert_eq!(time_checkpoint(61, 1, None, &cfg()), TimeCheckpoint::NotDue);
+        assert_eq!(
+            time_checkpoint(149, 1, None, &cfg()),
+            TimeCheckpoint::NotDue
+        );
+        assert_eq!(
+            time_checkpoint(150, 1, None, &cfg()),
+            TimeCheckpoint::Fire(2)
+        );
+        assert_eq!(
+            time_checkpoint(240, 2, None, &cfg()),
+            TimeCheckpoint::Fire(3)
+        );
+    }
+
+    #[test]
+    fn a_long_gap_between_prompts_fires_one_checkpoint_not_several() {
+        // 40 hours with no prompt: boundary 26 is current; the missed ones are not replayed.
+        assert_eq!(
+            time_checkpoint(2400, 1, None, &cfg()),
+            TimeCheckpoint::Fire(27)
+        );
+        assert_eq!(
+            time_checkpoint(2401, 27, None, &cfg()),
+            TimeCheckpoint::NotDue
+        );
+    }
+
+    #[test]
+    fn a_note_written_minutes_ago_skips_the_boundary_and_consumes_it() {
+        assert_eq!(
+            time_checkpoint(150, 1, Some(5.0), &cfg()),
+            TimeCheckpoint::Skip(2)
+        );
+        // Consumed: the same boundary does not fire once the cooldown lapses.
+        assert_eq!(
+            time_checkpoint(190, 2, Some(45.0), &cfg()),
+            TimeCheckpoint::NotDue
+        );
+        // The next boundary fires normally.
+        assert_eq!(
+            time_checkpoint(240, 2, Some(95.0), &cfg()),
+            TimeCheckpoint::Fire(3)
+        );
+    }
+
+    #[test]
+    fn an_old_note_does_not_suppress_the_checkpoint() {
+        // Negative control for the cooldown: just outside it, and far outside it.
+        assert_eq!(
+            time_checkpoint(150, 1, Some(30.0), &cfg()),
+            TimeCheckpoint::Fire(2)
+        );
+        assert_eq!(
+            time_checkpoint(150, 1, Some(600.0), &cfg()),
+            TimeCheckpoint::Fire(2)
+        );
+        // A note dated in the future (clock skew) is not "recent".
+        assert_eq!(
+            time_checkpoint(150, 1, Some(-3.0), &cfg()),
+            TimeCheckpoint::Fire(2)
+        );
+    }
+
+    #[test]
+    fn the_knobs_are_respected() {
+        let quiet = Config {
+            time_nudge_first_min: 120,
+            time_nudge_interval_min: 240,
+            ..Config::default()
+        };
+        assert_eq!(
+            time_checkpoint(119, 0, None, &quiet),
+            TimeCheckpoint::NotDue
+        );
+        assert_eq!(
+            time_checkpoint(120, 0, None, &quiet),
+            TimeCheckpoint::Fire(1)
+        );
+        assert_eq!(
+            time_checkpoint(359, 1, None, &quiet),
+            TimeCheckpoint::NotDue
+        );
+        assert_eq!(
+            time_checkpoint(360, 1, None, &quiet),
+            TimeCheckpoint::Fire(2)
+        );
+
+        let no_cooldown = Config {
+            checkpoint_cooldown_min: 0,
+            ..Config::default()
+        };
+        assert_eq!(
+            time_checkpoint(150, 1, Some(1.0), &no_cooldown),
+            TimeCheckpoint::Fire(2)
+        );
+
+        let no_repeats = Config {
+            time_nudge_interval_min: 0,
+            ..Config::default()
+        };
+        assert_eq!(
+            time_checkpoint(60, 0, None, &no_repeats),
+            TimeCheckpoint::Fire(1)
+        );
+        assert_eq!(
+            time_checkpoint(6000, 1, None, &no_repeats),
+            TimeCheckpoint::NotDue
+        );
+    }
 }
