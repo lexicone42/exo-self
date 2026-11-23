@@ -238,16 +238,18 @@ pub fn parse_frontmatter(content: &str) -> (HashMap<String, serde_yaml::Value>, 
         return (HashMap::new(), content.to_string());
     }
 
-    // Find closing ---
-    if let Some(end) = content[3..].find("\n---") {
-        let yaml_str = &content[4..3 + end]; // skip "---\n"
-        let rest = &content[3 + end + 4..]; // skip "\n---\n"
-        let map: HashMap<String, serde_yaml::Value> =
-            serde_yaml::from_str(yaml_str).unwrap_or_default();
-        (map, rest.trim_start_matches('\n').to_string())
-    } else {
-        (HashMap::new(), content.to_string())
-    }
+    // Find the closing `---`. Every slice below is bounds-checked: this runs on
+    // any note in any project, and a file such as "---\n---\n" (an empty block)
+    // used to make the YAML slice start after its own end and panic, which took
+    // session start down for every session.
+    let Some(end) = content[3..].find("\n---") else {
+        return (HashMap::new(), content.to_string());
+    };
+    let yaml_str = content.get(4..3 + end).unwrap_or("");
+    let rest = content.get(3 + end + 4..).unwrap_or("");
+    let map: HashMap<String, serde_yaml::Value> =
+        serde_yaml::from_str(yaml_str).unwrap_or_default();
+    (map, rest.trim_start_matches('\n').to_string())
 }
 
 /// Render YAML frontmatter + prose back to a markdown string
@@ -369,7 +371,41 @@ pub fn extract_surprises(text: &str) -> Vec<String> {
 /// user, shown to every session until acknowledged (#25). Bold form only. A
 /// line that merely starts with "Flag:" is too common in ordinary prose.
 pub fn extract_flags(text: &str) -> Vec<String> {
-    bold_entries(text, "Flag")
+    // A flag is shown to every session until the user acknowledges it, so a
+    // false one is costly. Prose that merely mentions the word in bold ("the
+    // **Flag** marker") must not raise one: the marker has to be followed by a
+    // separator, as in `**Flag** \u{2014} text`, `**Flag**: text` or `**Flag:** text`.
+    let mut entries = Vec::new();
+    for (pos, shape) in bold_marker_sites(text, "Flag") {
+        let after = text[pos..].trim_start_matches(' ');
+        let separated = match shape {
+            MarkerShape::Alone => {
+                text[..pos].ends_with(":**")
+                    || after.starts_with('\u{2014}')
+                    || after.starts_with(':')
+                    || after.starts_with("- ")
+                    || after.starts_with("-- ")
+            }
+            MarkerShape::Spanning => after.starts_with(':') || after.starts_with('\u{2014}'),
+        };
+        if !separated {
+            continue;
+        }
+        let Some(mut entry) = extract_after_marker(text, pos) else {
+            continue;
+        };
+        if shape == MarkerShape::Spanning {
+            if let Some(close) = entry.find("**") {
+                entry.replace_range(close..close + 2, "");
+            }
+            entry = entry.trim().to_string();
+        }
+        let entry = entry.trim_start_matches('-').trim().to_string();
+        if !entry.is_empty() && !entries.contains(&entry) {
+            entries.push(entry);
+        }
+    }
+    entries
 }
 
 /// Extract **Friction** entries from session notes prose.
@@ -913,5 +949,46 @@ mod tests {
         assert!(extract_sparks("trailing **Spark").is_empty());
         assert!(extract_sparks("trailing **Spark**").is_empty());
         assert!(extract_sparks("**Spark: **").is_empty());
+    }
+    #[test]
+    fn an_empty_or_unterminated_frontmatter_block_does_not_panic() {
+        for content in [
+            "---\n---\n",
+            "---\n---",
+            "---",
+            "---\n",
+            "---\n---\n\n**Flag** \u{2014} x",
+            "---\nkey: v\n---",
+        ] {
+            let (_map, _prose) = parse_frontmatter(content);
+        }
+        let (map, prose) = parse_frontmatter("---\n---\n\nBody.\n");
+        assert!(map.is_empty());
+        assert_eq!(prose, "Body.\n");
+        let (map, prose) = parse_frontmatter("---\nkey: v\n---");
+        assert_eq!(map.get("key").and_then(|v| v.as_str()), Some("v"));
+        assert_eq!(prose, "");
+    }
+
+    #[test]
+    fn a_flag_needs_a_separator_after_the_marker() {
+        for raised in [
+            "**Flag** \u{2014} the key leaked.",
+            "**Flag**: the key leaked.",
+            "**Flag:** the key leaked.",
+            "**Flag** - the key leaked.",
+            "**Flag: the key leaked.**",
+        ] {
+            assert_eq!(extract_flags(raised), vec!["the key leaked."], "{raised}");
+        }
+        for prose in [
+            "The **Flag** marker is new today.",
+            "I added a **Flag** channel and a status-line count.",
+            "**Flag** handling changed.",
+            "**Flags** in the plural.",
+            "**Flag (see below)** is discussed later.",
+        ] {
+            assert!(extract_flags(prose).is_empty(), "{prose}");
+        }
     }
 }
