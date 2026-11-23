@@ -6,9 +6,13 @@
 //!
 //!   * `handoffs/<session_id>.md` is read only by that session: after its own
 //!     compaction, and by the subagents it starts.
-//!   * `handoffs/latest.md` is the bridge to the *next* session in the same
-//!     project. It records which session and project wrote it, so a reader can
-//!     skip a handoff from elsewhere and label one it does show.
+//!   * `handoffs/latest--<project>.md` is the bridge to the *next* session in
+//!     the same project. Each project has its own, so a session ending in one
+//!     project cannot overwrite the handoff waiting for another. It records
+//!     which session wrote it, so a reader can label what it shows.
+//!   * `handoffs/latest.md` is the older single file. It is still read, once,
+//!     when a project has no file of its own, and only if it came from that
+//!     project or carries no origin.
 
 use crate::paths::ExoPaths;
 
@@ -23,7 +27,32 @@ pub struct Origin {
     pub written: String,
 }
 
-/// Write `latest.md` with a first line naming the session and project it came from.
+/// File-name-safe form of a project slug, for `latest--<project>.md`.
+fn slug_file_part(project_slug: &str) -> String {
+    project_slug
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn latest_path(paths: &ExoPaths, project_slug: &str) -> std::path::PathBuf {
+    if project_slug.is_empty() {
+        paths.handoffs_dir.join("latest.md")
+    } else {
+        paths
+            .handoffs_dir
+            .join(format!("latest--{}.md", slug_file_part(project_slug)))
+    }
+}
+
+/// Write the project's latest handoff, with a first line naming the session
+/// and project it came from.
 pub fn write_latest(paths: &ExoPaths, session_id: &str, project_slug: &str, content: &str) {
     let written = chrono::Local::now().format("%Y-%m-%dT%H:%M").to_string();
     let header = format!(
@@ -33,7 +62,7 @@ pub fn write_latest(paths: &ExoPaths, session_id: &str, project_slug: &str, cont
     );
     let _ = std::fs::create_dir_all(&paths.handoffs_dir);
     let _ = std::fs::write(
-        paths.handoffs_dir.join("latest.md"),
+        latest_path(paths, project_slug),
         format!("{header}{content}"),
     );
 }
@@ -90,31 +119,42 @@ pub enum Latest {
     },
 }
 
-/// Read `latest.md` for a new session, consuming it when it is shown.
+/// Read the latest handoff for a new session in `project_slug`, consuming it
+/// when it is shown.
 ///
-/// A handoff written in another project is left in place and not returned: it
-/// is not this session's history, and its own project's next session may still
-/// want it.
+/// The project's own file is used when it exists. Otherwise the older shared
+/// `latest.md` is used if it was written in this project or carries no origin;
+/// one written in another project is left in place and not returned.
 pub fn take_latest(paths: &ExoPaths, project_slug: &str) -> Latest {
-    let latest = paths.handoffs_dir.join("latest.md");
-    let Ok(content) = std::fs::read_to_string(&latest) else {
-        return Latest::None;
+    let own = latest_path(paths, project_slug);
+    let shared = paths.handoffs_dir.join("latest.md");
+    let candidates = if own == shared {
+        vec![shared]
+    } else {
+        vec![own, shared]
     };
-    let (origin, body) = split_origin(&content);
-    if body.trim().is_empty() {
+    for latest in candidates {
+        let Ok(content) = std::fs::read_to_string(&latest) else {
+            continue;
+        };
+        let (origin, body) = split_origin(&content);
+        if body.trim().is_empty() {
+            let _ = std::fs::remove_file(&latest);
+            continue;
+        }
+        // The stored project went through header_value, so compare like with like.
+        if let Some(o) = &origin
+            && o.project != "-"
+            && !project_slug.is_empty()
+            && o.project != header_value(project_slug)
+        {
+            continue;
+        }
+        let body = body.to_string();
         let _ = std::fs::remove_file(&latest);
-        return Latest::None;
+        return Latest::Handoff { origin, body };
     }
-    if let Some(o) = &origin
-        && o.project != "-"
-        && !project_slug.is_empty()
-        && o.project != project_slug
-    {
-        return Latest::None;
-    }
-    let body = body.to_string();
-    let _ = std::fs::remove_file(&latest);
-    Latest::Handoff { origin, body }
+    Latest::None
 }
 
 /// How old a session's own handoff may be and still describe what it is doing.
@@ -131,6 +171,22 @@ fn is_recent(path: &std::path::Path, max_age_secs: u64) -> bool {
         .ok()
         .and_then(|modified| modified.elapsed().ok())
         .is_some_and(|age| age.as_secs() <= max_age_secs)
+}
+
+/// The section headings `extract_handoff` writes. The Working Direction is the
+/// session's own last message, which often has `## ` headings of its own, so
+/// only these end the section.
+const HANDOFF_HEADINGS: [&str; 6] = [
+    "## Discoveries",
+    "## Friction & Lessons",
+    "## Unfinished Threads",
+    "## Working Hypotheses",
+    "## User Requests",
+    "## Files Modified",
+];
+
+fn is_handoff_heading(line: &str) -> bool {
+    HANDOFF_HEADINGS.iter().any(|h| line.starts_with(h))
 }
 
 /// The "Working Direction" of this session's own handoff, for its subagents.
@@ -159,7 +215,7 @@ pub fn session_direction(paths: &ExoPaths, session_id: &str, max_chars: usize) -
             in_section = true;
             continue;
         }
-        if in_section && line.starts_with("## ") {
+        if in_section && is_handoff_heading(line) {
             break;
         }
         if in_section {
@@ -297,7 +353,7 @@ mod tests {
             "workspace--karkinos",
             "## Working Direction\n\nbody\n",
         );
-        let content = std::fs::read_to_string(p.handoffs_dir.join("latest.md")).unwrap();
+        let content = std::fs::read_to_string(latest_path(&p, "workspace--karkinos")).unwrap();
         let (origin, body) = split_origin(&content);
         let origin = origin.expect("origin line");
         assert_eq!(origin.session, "abc-123");
@@ -311,7 +367,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = paths(dir.path());
         write_latest(&p, "s1 project=other -->", "a b", "body\n");
-        let content = std::fs::read_to_string(p.handoffs_dir.join("latest.md")).unwrap();
+        let content = std::fs::read_to_string(latest_path(&p, "a b")).unwrap();
         let (origin, body) = split_origin(&content);
         let origin = origin.expect("origin line");
         assert_eq!(origin.project, "ab");
@@ -332,7 +388,7 @@ mod tests {
         write_latest(&p, "session-b", "gominimal--infra", B_HANDOFF);
 
         assert_eq!(take_latest(&p, "workspace--repro-lab"), Latest::None);
-        assert!(p.handoffs_dir.join("latest.md").is_file());
+        assert!(latest_path(&p, "gominimal--infra").is_file());
 
         // The project it belongs to still gets it, once.
         match take_latest(&p, "gominimal--infra") {
@@ -342,8 +398,83 @@ mod tests {
             }
             Latest::None => panic!("own project should receive its handoff"),
         }
-        assert!(!p.handoffs_dir.join("latest.md").exists());
+        assert!(!latest_path(&p, "gominimal--infra").exists());
         assert_eq!(take_latest(&p, "gominimal--infra"), Latest::None);
+    }
+
+    #[test]
+    fn a_session_ending_in_one_project_does_not_overwrite_anothers_handoff() {
+        // With one shared file, whichever project ended last won.
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths(dir.path());
+        write_latest(
+            &p,
+            "session-a",
+            "workspace--karkinos",
+            "## Working Direction\n\nA\n",
+        );
+        write_latest(
+            &p,
+            "session-b",
+            "gominimal--infra",
+            "## Working Direction\n\nB\n",
+        );
+
+        match take_latest(&p, "workspace--karkinos") {
+            Latest::Handoff { origin, body } => {
+                assert_eq!(origin.unwrap().session, "session-a");
+                assert!(body.contains("\nA\n"));
+            }
+            Latest::None => panic!("karkinos lost its handoff to infra's"),
+        }
+        assert!(matches!(
+            take_latest(&p, "gominimal--infra"),
+            Latest::Handoff { .. }
+        ));
+    }
+
+    #[test]
+    fn the_older_shared_file_is_used_only_for_the_project_that_wrote_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths(dir.path());
+        std::fs::write(
+            p.handoffs_dir.join("latest.md"),
+            "<!-- exo-handoff session=old project=gominimal--infra written=2026-11-01T10:00 -->\nbody\n",
+        )
+        .unwrap();
+        assert_eq!(take_latest(&p, "workspace--karkinos"), Latest::None);
+        assert!(p.handoffs_dir.join("latest.md").is_file());
+        assert!(matches!(
+            take_latest(&p, "gominimal--infra"),
+            Latest::Handoff { .. }
+        ));
+    }
+
+    #[test]
+    fn a_project_slug_with_odd_characters_still_gets_its_own_handoff() {
+        // header_value strips whitespace, '=' and '>' from the stored slug; the
+        // reader's slug has to be compared in the same form.
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths(dir.path());
+        let slug = "My Projects--a=b";
+        write_latest(&p, "s", slug, "## Working Direction\n\nX\n");
+        assert!(matches!(take_latest(&p, slug), Latest::Handoff { .. }));
+    }
+
+    #[test]
+    fn headings_inside_the_working_direction_do_not_end_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths(dir.path());
+        std::fs::write(
+            p.handoff_file("session-a"),
+            "## Working Direction\n\nTwo things remain.\n\n## What changed\n\nThe parser.\n\n\
+             ## Unfinished Threads\n\n- one\n",
+        )
+        .unwrap();
+        let direction = session_direction(&p, "session-a", 400);
+        assert!(direction.contains("Two things remain."));
+        assert!(direction.contains("The parser."));
+        assert!(!direction.contains("- one"));
     }
 
     #[test]
@@ -365,8 +496,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = paths(dir.path());
         write_latest(&p, "s", "p", "  \n");
+        assert!(latest_path(&p, "p").is_file());
         assert_eq!(take_latest(&p, "p"), Latest::None);
-        assert!(!p.handoffs_dir.join("latest.md").exists());
+        assert!(!latest_path(&p, "p").exists());
     }
     #[test]
     fn a_handoff_from_long_ago_is_not_the_sessions_current_direction() {

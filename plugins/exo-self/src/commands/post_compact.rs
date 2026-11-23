@@ -91,7 +91,7 @@ pub fn run() {
     }
 
     // Load handoff
-    let handoff = load_handoff(&paths, session_id);
+    let handoff = load_handoff(&paths, session_id, &project_slug);
     if !handoff.is_empty() {
         sections.push(format!("### Session Handoff (auto-extracted)\n\n{handoff}"));
     }
@@ -116,13 +116,13 @@ pub fn run() {
 
 /// This session's own handoff, written by its PreCompact hook.
 ///
-/// `latest.md` is read only when the hook input carried no session id, which is
-/// the one case where PreCompact had nowhere else to write. With a session id,
-/// falling back to `latest.md` would show whichever session on the machine
-/// compacted last (#28).
-fn load_handoff(paths: &ExoPaths, session_id: &str) -> String {
+/// The project's latest handoff is read only when the hook input carried no
+/// session id, which is the one case where PreCompact had nowhere else to
+/// write. With a session id, falling back to it would show another session's
+/// handoff (#28).
+fn load_handoff(paths: &ExoPaths, session_id: &str, project_slug: &str) -> String {
     let path = if session_id.is_empty() {
-        paths.handoffs_dir.join("latest.md")
+        crate::handoff::latest_path(paths, project_slug)
     } else {
         paths.handoff_file(session_id)
     };
