@@ -1,0 +1,30 @@
+# Dependency updates for exo-self.
+#
+# One grouped pull request a week per ecosystem, so updates arrive as a single
+# change that CI checks, not a stream. A security update is not held for the
+# weekly run: GitHub opens those on their own when an advisory lands.
+#
+# A Dependabot pull request is a prompt to look, not a verdict. CI passing
+# means the suite still passes with the new versions. It does not mean the
+# update was needed or that the changelog was read.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      cargo:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
