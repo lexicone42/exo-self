@@ -54,6 +54,9 @@ pub struct SessionState {
     // Time-based nudges (for 1M context windows where percentage thresholds rarely fire)
     pub time_nudge_count: u32,
 
+    // The digest suggestion is made once per session, at the first checkpoint (#24).
+    pub digest_hint_fired: bool,
+
     // Reasoning-effort level captured from hook input when present (e.g. "xhigh").
     // Empty when the host doesn't supply it — an additive welfare/intensity signal.
     pub effort: String,
@@ -97,6 +100,7 @@ impl Default for SessionState {
             last_stop_time: 0.0,
             scouted: false,
             time_nudge_count: 0,
+            digest_hint_fired: false,
             effort: String::new(),
             serving_model: String::new(),
         }

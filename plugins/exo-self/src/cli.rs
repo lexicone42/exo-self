@@ -69,6 +69,8 @@ pub enum Command {
         #[command(subcommand)]
         action: FlagAction,
     },
+    /// List projects whose digest is missing or stale
+    Digests,
     /// Reflexive analysis of exo-self session data
     Reflect {
         /// Load session data + meta into redb, infer preferences
@@ -107,6 +109,7 @@ impl Command {
                 | Command::BackfillTraces
                 | Command::Sigil { .. }
                 | Command::Flag { .. }
+                | Command::Digests
         )
     }
 }
@@ -187,6 +190,25 @@ pub fn dispatch(cmd: Command) -> u8 {
             FlagAction::List { all } => crate::flags::run_list(all),
             FlagAction::Ack { id } => crate::flags::run_ack(&id),
         },
+        Command::Digests => {
+            let paths = crate::paths::ExoPaths::new();
+            let backlog = crate::project::digest_backlog(&paths);
+            if backlog.is_empty() {
+                println!("Every project's digest is current.");
+            }
+            for (slug, state) in backlog {
+                match state {
+                    crate::project::DigestState::Missing { notes } => {
+                        println!("{slug}\tno digest\t{notes} notes")
+                    }
+                    crate::project::DigestState::Stale { new_notes } => {
+                        println!("{slug}\tstale\t{new_notes} notes since digest")
+                    }
+                    _ => {}
+                }
+            }
+            0
+        }
         Command::Backfill => {
             commands::backfill::run();
             0

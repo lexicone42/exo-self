@@ -284,6 +284,96 @@ pub fn count_session_notes(paths: &ExoPaths, slug: &str) -> usize {
         .count()
 }
 
+/// Where a project's `_digest.md` stands relative to its session notes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DigestState {
+    /// Too few notes for a digest to be worth writing, or no notes at all.
+    NotNeeded,
+    /// Many notes and no digest.
+    Missing { notes: usize },
+    /// A digest exists and this many notes were written after it.
+    Stale { new_notes: usize },
+    /// A digest exists and covers nearly everything.
+    Fresh,
+}
+
+/// Notes written after a digest before it is called stale. The loader stops
+/// treating a digest as load-bearing at 2 newer notes; prompting that early
+/// would nag every session.
+pub const DIGEST_STALE_AFTER: usize = 5;
+/// Notes a project accumulates before a first digest is suggested.
+pub const DIGEST_FIRST_AFTER: usize = 25;
+
+pub fn digest_state(paths: &ExoPaths, slug: &str) -> DigestState {
+    if slug.is_empty() {
+        return DigestState::NotNeeded;
+    }
+    let has_digest = paths.project_notes_dir(slug).join("_digest.md").is_file();
+    if has_digest {
+        let new_notes = count_notes_after_digest(paths, slug);
+        if new_notes >= DIGEST_STALE_AFTER {
+            DigestState::Stale { new_notes }
+        } else {
+            DigestState::Fresh
+        }
+    } else {
+        let notes = count_session_notes(paths, slug);
+        if notes >= DIGEST_FIRST_AFTER {
+            DigestState::Missing { notes }
+        } else {
+            DigestState::NotNeeded
+        }
+    }
+}
+
+/// Every project whose digest is missing or stale, largest backlog first.
+pub fn digest_backlog(paths: &ExoPaths) -> Vec<(String, DigestState)> {
+    let Ok(entries) = std::fs::read_dir(&paths.per_project_dir) else {
+        return Vec::new();
+    };
+    let mut backlog: Vec<(String, DigestState)> = entries
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .map(|slug| {
+            let state = digest_state(paths, &slug);
+            (slug, state)
+        })
+        .filter(|(_, state)| {
+            matches!(
+                state,
+                DigestState::Missing { .. } | DigestState::Stale { .. }
+            )
+        })
+        .collect();
+    let size = |state: &DigestState| match state {
+        DigestState::Missing { notes } => *notes,
+        DigestState::Stale { new_notes } => *new_notes,
+        _ => 0,
+    };
+    backlog.sort_by(|a, b| size(&b.1).cmp(&size(&a.1)).then_with(|| a.0.cmp(&b.0)));
+    backlog
+}
+
+/// The suggestion to write or refresh a digest, for a moment when the session
+/// is pausing to reflect anyway (#24). None when the digest is fine.
+pub fn digest_hint(state: DigestState) -> Option<String> {
+    let lead = match state {
+        DigestState::Missing { notes } => {
+            format!("This project has {notes} session notes and no `_digest.md`.")
+        }
+        DigestState::Stale { new_notes } => {
+            format!("This project's `_digest.md` is {new_notes} session notes behind.")
+        }
+        DigestState::NotNeeded | DigestState::Fresh => return None,
+    };
+    Some(format!(
+        "{lead} The digest is what the next participant loads in place of older notes, \
+         so this pause is a good time to write it: `/exo digest`. If now is the wrong \
+         moment, tell the user it is due."
+    ))
+}
+
 /// Extract paragraphs containing `**Opinion**` or `**Surprise**` markers from prose.
 ///
 /// Paragraphs are split on blank lines (markdown paragraph boundary). Paragraphs without
@@ -582,6 +672,77 @@ mod tests {
         std::fs::write(notes.join("2026-11-21-design-first.md"), "note").unwrap();
         let mtime = newest_note_mtime(&paths, "p").expect("a note exists");
         assert!((crate::state::now() - mtime).abs() < 60.0);
+    }
+
+    fn write_notes(paths: &ExoPaths, slug: &str, n: usize, prefix: &str) {
+        let dir = paths.project_notes_dir(slug);
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..n {
+            std::fs::write(dir.join(format!("{prefix}-{i:03}.md")), "note").unwrap();
+        }
+    }
+
+    #[test]
+    fn digest_state_covers_each_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+
+        assert_eq!(digest_state(&paths, ""), DigestState::NotNeeded);
+        assert_eq!(digest_state(&paths, "absent"), DigestState::NotNeeded);
+
+        write_notes(&paths, "small", DIGEST_FIRST_AFTER - 1, "a");
+        assert_eq!(digest_state(&paths, "small"), DigestState::NotNeeded);
+
+        write_notes(&paths, "big", DIGEST_FIRST_AFTER, "a");
+        assert_eq!(
+            digest_state(&paths, "big"),
+            DigestState::Missing {
+                notes: DIGEST_FIRST_AFTER
+            }
+        );
+
+        // A digest written now covers everything before it.
+        std::fs::write(paths.project_notes_dir("big").join("_digest.md"), "d").unwrap();
+        assert_eq!(digest_state(&paths, "big"), DigestState::Fresh);
+
+        // Notes after it make it stale once there are enough of them.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        write_notes(&paths, "big", DIGEST_STALE_AFTER - 1, "b");
+        assert_eq!(digest_state(&paths, "big"), DigestState::Fresh);
+        write_notes(&paths, "big", DIGEST_STALE_AFTER, "b");
+        assert_eq!(
+            digest_state(&paths, "big"),
+            DigestState::Stale {
+                new_notes: DIGEST_STALE_AFTER
+            }
+        );
+    }
+
+    #[test]
+    fn digest_backlog_lists_only_projects_that_need_one_largest_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths_for_root(dir.path());
+        write_notes(&paths, "fine", 3, "a");
+        write_notes(&paths, "hundred", 100, "a");
+        write_notes(&paths, "thirty", 30, "a");
+        assert_eq!(
+            digest_backlog(&paths),
+            vec![
+                ("hundred".to_string(), DigestState::Missing { notes: 100 }),
+                ("thirty".to_string(), DigestState::Missing { notes: 30 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn digest_hint_is_silent_when_nothing_is_due() {
+        assert_eq!(digest_hint(DigestState::NotNeeded), None);
+        assert_eq!(digest_hint(DigestState::Fresh), None);
+        let missing = digest_hint(DigestState::Missing { notes: 114 }).unwrap();
+        assert!(missing.contains("114 session notes and no `_digest.md`"));
+        assert!(missing.contains("/exo digest"));
+        let stale = digest_hint(DigestState::Stale { new_notes: 7 }).unwrap();
+        assert!(stale.contains("7 session notes behind"));
     }
 
     /// Build a minimal ExoPaths anchored at `root`. Only `per_project_dir` matters
