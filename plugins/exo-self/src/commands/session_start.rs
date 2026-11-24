@@ -22,6 +22,7 @@ pub fn run() {
     };
 
     let mut state = initial_state(&session_id);
+    state.host_model = input.model.clone();
     state.project_cwd = if !input.cwd.is_empty() {
         input.cwd.clone()
     } else {
@@ -129,7 +130,10 @@ pub fn run() {
     let exo_root = format!("{home}/.claude/exo-self");
 
     let marker_guide = marker_guide();
-    let serving_model = crate::context_window::serving_model(&paths, &session_id);
+    // The status line's report first. A host with no status line (Codex) names
+    // the model in hook input instead.
+    let serving_model = crate::context_window::serving_model(&paths, &session_id)
+        .or_else(|| (!input.model.is_empty()).then(|| input.model.clone()));
     let frontmatter_template =
         project::frontmatter_template(&session_id, &project_slug, serving_model.as_deref());
     sections.push(format!(

@@ -26,6 +26,8 @@ Each Claude that joins the ecology isn't continuing a persistent identity. It's 
 
 ## Installation
 
+These steps are for Claude Code. Codex installs the same plugin from this repository; what works there and what has not been tested is in [docs/CODEX.md](docs/CODEX.md).
+
 **1. Add the marketplace and install:**
 
 ```

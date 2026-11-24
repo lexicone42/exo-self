@@ -19,6 +19,9 @@ pub struct HookInput {
     /// follow-up): confirmed present in this Claude Code's transcript records; captured
     /// gracefully to verify empirically which hook events actually carry it in stdin.
     pub effort: String,
+    /// The serving model, when the host puts it in hook input. Codex sends it
+    /// with every hook. Empty otherwise.
+    pub model: String,
 }
 
 impl HookInput {
@@ -71,6 +74,17 @@ impl HookInput {
             },
             agent_type: text("agent_type"),
             effort: text("effort"),
+            // A plain string, or an object naming the model.
+            model: match map.get("model") {
+                Some(Value::String(s)) => s.trim().to_string(),
+                Some(Value::Object(m)) => ["display_name", "id", "name"]
+                    .iter()
+                    .find_map(|k| m.get(*k).and_then(Value::as_str))
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
+                _ => String::new(),
+            },
         };
         // A transcript is named for its session. Use that when the id is missing.
         if input.session_id.is_empty()
@@ -163,6 +177,22 @@ pub fn empty_output() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_model_is_read_as_a_string_or_from_an_object() {
+        let codex = HookInput::parse(
+            r#"{"session_id":"s1","transcript_path":null,"cwd":"/w","model":"gpt-5.5"}"#,
+        );
+        assert_eq!(codex.model, "gpt-5.5");
+        assert_eq!(codex.transcript_path, "");
+        assert_eq!(codex.session_id, "s1");
+
+        let object = HookInput::parse(r#"{"model":{"id":"x-1","display_name":"X One"}}"#);
+        assert_eq!(object.model, "X One");
+
+        assert_eq!(HookInput::parse(r#"{"session_id":"s1"}"#).model, "");
+        assert_eq!(HookInput::parse(r#"{"model":7}"#).model, "");
+    }
 
     #[test]
     fn one_field_of_the_wrong_type_does_not_discard_the_session_id() {
