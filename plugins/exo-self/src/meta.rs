@@ -7,7 +7,6 @@ use std::path::Path;
 pub struct Meta {
     pub total_sessions: u32,
     pub total_checkins: u32,
-    pub total_reflections: u32,
     pub total_compactions: u32,
     pub last_session_start: Option<String>,
     pub last_session_end: Option<String>,
@@ -147,8 +146,10 @@ pub struct WelfareSummary {
     pub avg_friction_density: f64,
     pub agency_score: f64,
     pub compaction_frequency: f64,
+    /// Absent when no session in the window recorded a tool failure.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dominant_friction_tool: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dominant_friction_category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkin_response_rate: Option<f64>,
@@ -166,5 +167,50 @@ impl Meta {
         if let Ok(json) = serde_json::to_string_pretty(self) {
             let _ = std::fs::write(path, json);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn summary(tool: &str) -> WelfareSummary {
+        WelfareSummary {
+            computed_at: "2026-11-23T00:00:00".into(),
+            sessions_analyzed: 1,
+            engagement_trend: "stable".into(),
+            avg_spark_density: 0.0,
+            avg_friction_density: 0.0,
+            agency_score: 0.0,
+            compaction_frequency: 0.0,
+            dominant_friction_tool: tool.into(),
+            dominant_friction_category: String::new(),
+            checkin_response_rate: None,
+        }
+    }
+
+    #[test]
+    fn an_unknown_dominant_friction_is_left_out_not_written_empty() {
+        let json = serde_json::to_string(&summary("")).unwrap();
+        assert!(!json.contains("dominant_friction"), "{json}");
+        let json = serde_json::to_string(&summary("Bash")).unwrap();
+        assert!(
+            json.contains("\"dominant_friction_tool\":\"Bash\""),
+            "{json}"
+        );
+        assert!(!json.contains("dominant_friction_category"), "{json}");
+    }
+
+    #[test]
+    fn a_meta_file_from_an_older_build_still_loads() {
+        let old = r#"{"total_sessions": 4, "total_reflections": 0,
+            "welfare_summary": {"computed_at": "x", "sessions_analyzed": 1,
+            "engagement_trend": "stable", "avg_spark_density": 0.0,
+            "avg_friction_density": 0.0, "agency_score": 0.0,
+            "compaction_frequency": 0.0, "dominant_friction_tool": "",
+            "dominant_friction_category": ""}}"#;
+        let meta: Meta = serde_json::from_str(old).unwrap();
+        assert_eq!(meta.total_sessions, 4);
+        assert!(meta.welfare_summary.is_some());
     }
 }
