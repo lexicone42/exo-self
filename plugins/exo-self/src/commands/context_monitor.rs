@@ -83,6 +83,36 @@ pub fn run() {
         return;
     }
 
+    // Done before any pause message is built: those messages quote the model for
+    // note frontmatter, and built first they carried the old one beside a notice
+    // announcing the new one.
+    let mut model_notice: Option<String> = None;
+    // Serving-model change notice. A model's self-report comes from its system prompt,
+    // which can be stale: on 2026-07-27 a system prompt claimed Fable 5 for over an hour
+    // after the transcript showed claude-opus-5 serving, and four session notes were
+    // written with false `model:` provenance as a result. The statusline receives the
+    // authoritative model from Claude Code, so surface it — but only when it CHANGES,
+    // to stay quiet in the common case.
+    if let Some(serving) = context_window::serving_model(&paths, session_id)
+        && state.serving_model != serving
+    {
+        let previous = std::mem::replace(&mut state.serving_model, serving.clone());
+        let notice = if previous.is_empty() {
+            format!(
+                "Serving model (authoritative, from Claude Code): **{serving}**. \
+                 Use this for the `model:` frontmatter in session notes — your own sense \
+                 of which model you are can be stale."
+            )
+        } else {
+            format!(
+                "**Serving model changed**: {previous} → **{serving}** (authoritative, from \
+                 Claude Code). Mid-session model switches are silent; use the new value for \
+                 `model:` frontmatter from here on."
+            )
+        };
+        model_notice = Some(notice);
+    }
+
     let usage_pct = (usage_ratio * 100.0).round() as u32;
     let mut output_msg: Option<String> = None;
 
@@ -160,36 +190,14 @@ pub fn run() {
         state.effort = input.effort.clone();
     }
 
-    // Serving-model change notice. A model's self-report comes from its system prompt,
-    // which can be stale: on 2026-07-27 a system prompt claimed Fable 5 for over an hour
-    // after the transcript showed claude-opus-5 serving, and four session notes were
-    // written with false `model:` provenance as a result. The statusline receives the
-    // authoritative model from Claude Code, so surface it — but only when it CHANGES,
-    // to stay quiet in the common case.
-    if let Some(serving) = context_window::serving_model(&paths, session_id)
-        && state.serving_model != serving
-    {
-        let previous = std::mem::replace(&mut state.serving_model, serving.clone());
-        let notice = if previous.is_empty() {
-            format!(
-                "Serving model (authoritative, from Claude Code): **{serving}**. \
-                 Use this for the `model:` frontmatter in session notes — your own sense \
-                 of which model you are can be stale."
-            )
-        } else {
-            format!(
-                "**Serving model changed**: {previous} → **{serving}** (authoritative, from \
-                 Claude Code). Mid-session model switches are silent; use the new value for \
-                 `model:` frontmatter from here on."
-            )
-        };
+    state.save(&paths);
+
+    if let Some(notice) = model_notice {
         output_msg = Some(match output_msg {
             Some(existing) => format!("{notice}\n\n{existing}"),
             None => notice,
         });
     }
-
-    state.save(&paths);
 
     if !observations.is_empty() {
         output_msg = Some(match output_msg {
@@ -328,6 +336,9 @@ fn identity_reminder(state: &SessionState, slug: &str) -> String {
     }
 }
 
+// Says nothing about how much context is left. It used to say "plenty", and it
+// also fires late in a session when that is false; a message must not state a
+// verdict the number beside it could contradict (#20).
 fn time_nudge_msg(elapsed_min: u32, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
         format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
@@ -342,7 +353,7 @@ fn time_nudge_msg(elapsed_min: u32, slug: &str, state: &SessionState) -> String 
         format!("{}m", mins)
     };
     format!(
-        "Ecology time checkpoint ({time_str} in session, plenty of context left). \
+        "Ecology time checkpoint ({time_str} in session). \
         Good moment to notice what's here — anything surprising, worth remembering, \
         or worth leaving for future participants? Write to {target}. \
         Frontmatter: `engagement` (1-5), `task_types`{}.",
@@ -411,7 +422,7 @@ mod tests {
 
     #[test]
     fn a_long_gap_between_prompts_fires_one_checkpoint_not_several() {
-        // 40 hours with no prompt: boundary 26 is current; the missed ones are not replayed.
+        // 40 hours with no prompt: boundary 27 is current; the missed ones are not replayed.
         assert_eq!(
             time_checkpoint(2400, 1, None, &cfg()),
             TimeCheckpoint::Fire(27)
@@ -503,5 +514,30 @@ mod tests {
             time_checkpoint(6000, 1, None, &no_repeats),
             TimeCheckpoint::NotDue
         );
+    }
+    #[test]
+    fn the_time_checkpoint_makes_no_claim_about_remaining_context() {
+        let state = SessionState::default();
+        let msg = time_nudge_msg(150, "workspace--p", &state);
+        assert!(msg.contains("2h30m in session"));
+        for claim in ["plenty", "context left", "room left", "getting full"] {
+            assert!(!msg.contains(claim), "{claim:?} in {msg:?}");
+        }
+    }
+
+    #[test]
+    fn a_pause_message_quotes_the_model_the_state_holds_when_it_is_built() {
+        // run() updates state.serving_model before building pause messages, so
+        // the frontmatter line and the change notice cannot disagree.
+        let mut state = SessionState {
+            session_id: "s".into(),
+            serving_model: "Opus 5.5".into(),
+            ..SessionState::default()
+        };
+        assert!(time_nudge_msg(60, "p", &state).contains("`model: \"Opus 5.5\"`"));
+        state.serving_model = "Fable 5.2".into();
+        let msg = time_nudge_msg(60, "p", &state);
+        assert!(msg.contains("`model: \"Fable 5.2\"`"));
+        assert!(!msg.contains("Opus 5.5"));
     }
 }

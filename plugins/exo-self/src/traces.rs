@@ -47,8 +47,23 @@ pub fn write_trace(
         text_hash = text_hash.wrapping_mul(0x0100_0193);
     }
 
-    let filename =
-        format!("{trace_type}--{ts_file}--{proj_short}--{sid_short}--{text_hash:08x}.md");
+    // The same marker is found again at every exit of a session whose note is
+    // still on disk. One trace per marker: skip it if this session already
+    // wrote this text for this project.
+    let suffix = format!("--{proj_short}--{sid_short}--{text_hash:08x}.md");
+    let prefix = format!("{trace_type}--");
+    let already_written = std::fs::read_dir(traces_dir).is_ok_and(|entries| {
+        entries.flatten().any(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(&suffix))
+        })
+    });
+    if already_written {
+        return;
+    }
+
+    let filename = format!("{trace_type}--{ts_file}{suffix}");
 
     let mut frontmatter = format!(
         "---\ntype: \"{trace_type}\"\nproject: \"{project}\"\ntimestamp: \"{ts_front}\"\nsession_id: \"{session_id}\""
@@ -256,6 +271,48 @@ mod tests {
         assert_eq!(bodies.len(), 3);
         assert!(bodies.iter().any(|b| b.ends_with("first spark\n")));
         assert!(bodies.iter().any(|b| b.ends_with("third spark\n")));
+    }
+
+    #[test]
+    fn the_same_marker_is_traced_once_however_often_the_session_exits() {
+        let dir = tempfile::tempdir().unwrap();
+        for _ in 0..3 {
+            write_trace(
+                dir.path(),
+                "spark",
+                "one spark",
+                "workspace--p",
+                "ccff8de5-0000",
+                None,
+            );
+        }
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        // A different type, project or session is a different trace.
+        write_trace(
+            dir.path(),
+            "opinion",
+            "one spark",
+            "workspace--p",
+            "ccff8de5-0000",
+            None,
+        );
+        write_trace(
+            dir.path(),
+            "spark",
+            "one spark",
+            "workspace--q",
+            "ccff8de5-0000",
+            None,
+        );
+        write_trace(
+            dir.path(),
+            "spark",
+            "one spark",
+            "workspace--p",
+            "dee2313f-0000",
+            None,
+        );
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 4);
     }
 
     #[test]

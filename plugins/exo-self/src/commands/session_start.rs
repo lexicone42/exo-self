@@ -21,7 +21,7 @@ pub fn run() {
         input.session_id.clone()
     };
 
-    let mut state = initial_state(&paths, &session_id, &input.source);
+    let mut state = initial_state(&session_id);
     state.project_cwd = if !input.cwd.is_empty() {
         input.cwd.clone()
     } else {
@@ -524,20 +524,15 @@ fn load_and_consume_scout(paths: &ExoPaths, project_slug: &str) -> String {
     )
 }
 
-/// The state a session starts with.
+/// The state a session starts with: always fresh, on resume as well.
 ///
-/// A new or cleared session starts from nothing. A resumed session keeps what
-/// it had: SessionStart also fires on resume, and writing a fresh state there
-/// zeroed the failure, task and compaction counts and restarted the clock each
-/// time a long-running session was reopened, so a session that had compacted a
-/// dozen times reported none.
-fn initial_state(paths: &ExoPaths, session_id: &str, source: &str) -> SessionState {
-    if source == "resume" && paths.state_file(session_id).is_file() {
-        let state = SessionState::load(paths, session_id);
-        if state.session_start > 0.0 {
-            return state;
-        }
-    }
+/// State is per sitting. Session-end writes one history entry per exit and
+/// computes its figures (duration, failures per hour, whether the session
+/// reflected unprompted) from this state, so the clock and the counters have to
+/// cover the same stretch of time. An earlier change kept them across a resume;
+/// a session resumed after three months then reported a three-month duration,
+/// near-zero rates, and credit for notes other sessions wrote in between.
+fn initial_state(session_id: &str) -> SessionState {
     SessionState {
         session_id: session_id.to_string(),
         session_start: state::now(),
@@ -830,49 +825,14 @@ mod tests {
         assert!(crate::markdown::extract_flags(&guide).is_empty());
     }
     #[test]
-    fn a_resumed_session_keeps_its_counters_and_clock() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = ExoPaths::at(dir.path().to_path_buf());
-        let mut earlier = initial_state(&paths, "s1", "startup");
-        earlier.session_start -= 7200.0;
-        earlier.tool_failures = 4;
-        earlier.task_completions = 9;
-        earlier.compactions = 12;
-        earlier.save(&paths);
-
-        let resumed = initial_state(&paths, "s1", "resume");
-        assert_eq!(resumed.tool_failures, 4);
-        assert_eq!(resumed.task_completions, 9);
-        assert_eq!(resumed.compactions, 12);
-        // The clock is the original one, not "now". Compared with a tolerance:
-        // a float read back from JSON can differ in its last bit.
-        assert!((resumed.session_start - earlier.session_start).abs() < 0.001);
-        assert!(state::now() - resumed.session_start > 7000.0);
-    }
-
-    #[test]
-    fn startup_and_clear_start_from_nothing_even_with_a_state_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = ExoPaths::at(dir.path().to_path_buf());
-        let mut earlier = initial_state(&paths, "s1", "startup");
-        earlier.tool_failures = 4;
-        earlier.save(&paths);
-
-        for source in ["startup", "clear", ""] {
-            let state = initial_state(&paths, "s1", source);
-            assert_eq!(state.tool_failures, 0, "{source}");
-            assert_eq!(state.session_id, "s1");
-            assert!(state.session_start > 0.0);
-        }
-    }
-
-    #[test]
-    fn a_resume_with_no_state_file_starts_fresh() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = ExoPaths::at(dir.path().to_path_buf());
-        let state = initial_state(&paths, "never-seen", "resume");
-        assert_eq!(state.session_id, "never-seen");
+    fn every_start_including_a_resume_begins_a_fresh_sitting() {
+        let before = state::now();
+        let state = initial_state("s1");
+        assert_eq!(state.session_id, "s1");
+        assert!(state.session_start >= before);
+        assert_eq!(state.tool_failures, 0);
+        assert_eq!(state.task_completions, 0);
         assert_eq!(state.compactions, 0);
-        assert!(state.session_start > 0.0);
+        assert_eq!(state.time_nudge_count, 0);
     }
 }

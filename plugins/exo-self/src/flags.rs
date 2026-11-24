@@ -181,10 +181,23 @@ pub fn open(paths: &ExoPaths) -> Vec<Flag> {
         .into_iter()
         .filter(|f| !is_acked(&acked, f))
         .collect();
-    if paths.root.is_dir() {
-        let _ = std::fs::write(count_path(paths), open.len().to_string());
-    }
+    write_count(paths, open.len());
     open
+}
+
+/// Replace the count file in one step. The status line of every running
+/// session reads it constantly; writing in place would let one of them see it
+/// empty and show no flags.
+fn write_count(paths: &ExoPaths, count: usize) {
+    if !paths.root.is_dir() {
+        return;
+    }
+    let tmp = paths
+        .root
+        .join(format!("flags-open-count.tmp{}", std::process::id()));
+    if std::fs::write(&tmp, count.to_string()).is_ok() {
+        let _ = std::fs::rename(&tmp, count_path(paths));
+    }
 }
 
 /// The open-flag count as of the last scan. 0 when it has never been taken.
@@ -231,6 +244,9 @@ pub fn ack(paths: &ExoPaths, prefix: &str) -> Result<Flag, AckError> {
         0 => Err(AckError::NotFound),
         1 => {
             let flag = matches.remove(0);
+            // Two sessions acknowledging at once would each read the same record
+            // and the later write would drop the earlier acknowledgement.
+            let _lock = AckLock::take(paths).ok_or(AckError::Write)?;
             let mut acked = load_acked_strict(paths).map_err(AckError::Unreadable)?;
             acked.insert(
                 flag.id.clone(),
@@ -252,6 +268,46 @@ pub fn ack(paths: &ExoPaths, prefix: &str) -> Result<Flag, AckError> {
         _ => Err(AckError::Ambiguous(
             matches.into_iter().map(|f| f.id).collect(),
         )),
+    }
+}
+
+/// A lock file held while the acknowledgement record is read and rewritten.
+struct AckLock(PathBuf);
+
+impl AckLock {
+    fn take(paths: &ExoPaths) -> Option<Self> {
+        let path = paths.root.join("flags-acked.lock");
+        for attempt in 0..40 {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Some(Self(path)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // A lock left by a process that died would block every
+                    // later acknowledgement. One older than ten seconds is stale.
+                    let stale = std::fs::metadata(&path)
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|m| m.elapsed().ok())
+                        .is_some_and(|age| age.as_secs() >= 10);
+                    if stale && attempt == 0 {
+                        let _ = std::fs::remove_file(&path);
+                        continue;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+}
+
+impl Drop for AckLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 
@@ -309,10 +365,14 @@ pub fn run_list(all: bool) -> u8 {
 /// What `flag list` prints. Listing counts as a scan, so it also refreshes the
 /// status-line count.
 pub fn list_text(paths: &ExoPaths, all: bool) -> String {
-    let open_ids: Vec<String> = open(paths).into_iter().map(|f| f.id).collect();
+    // One scan for both the listing and the count, so they cannot disagree
+    // about a flag written between two scans.
+    let acked = load_acked(paths);
+    let flags = scan(paths);
+    write_count(paths, flags.iter().filter(|f| !is_acked(&acked, f)).count());
     let mut out = Vec::new();
-    for flag in scan(paths) {
-        let is_open = open_ids.contains(&flag.id);
+    for flag in &flags {
+        let is_open = !is_acked(&acked, flag);
         if !is_open && !all {
             continue;
         }
@@ -562,6 +622,13 @@ mod tests {
         )]);
         // Never scanned: nothing to show, and no file is invented.
         assert_eq!(last_open_count(&paths), 0);
+        assert!(!count_path(&paths).exists());
+
+        // A count file that cannot be read as a number shows no flags and no error.
+        std::fs::write(count_path(&paths), "").unwrap();
+        assert_eq!(last_open_count(&paths), 0);
+        std::fs::write(count_path(&paths), "not a number").unwrap();
+        assert_eq!(last_open_count(&paths), 0);
 
         let flags = open(&paths);
         assert_eq!(last_open_count(&paths), 2);
@@ -681,5 +748,43 @@ mod tests {
         let flags = scan(&paths);
         assert_eq!(flags.len(), 1);
         assert_eq!(flags[0].text, "still found.");
+    }
+    #[test]
+    fn the_acknowledgement_lock_is_exclusive_and_released() {
+        let (_d, paths) = paths_with(&[("p", "a.md", "**Flag** \u{2014} one.\n")]);
+        let lock_path = paths.root.join("flags-acked.lock");
+        {
+            let _held = AckLock::take(&paths).expect("first taker gets the lock");
+            assert!(lock_path.exists());
+        }
+        assert!(!lock_path.exists());
+
+        // A lock left behind by a dead process long ago does not block an ack.
+        std::fs::write(&lock_path, "").unwrap();
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        std::fs::File::options()
+            .write(true)
+            .open(&lock_path)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        let id = open(&paths)[0].id.clone();
+        assert!(ack(&paths, &id).is_ok());
+        assert!(!lock_path.exists());
+    }
+
+    #[test]
+    fn listing_all_marks_only_acknowledged_flags_as_acked() {
+        let (_d, paths) = paths_with(&[(
+            "p",
+            "a.md",
+            "**Flag** \u{2014} one.\n\n**Flag** \u{2014} two.\n",
+        )]);
+        let first = open(&paths)[0].id.clone();
+        ack(&paths, &first).unwrap();
+        let text = list_text(&paths, true);
+        assert_eq!(text.matches("[acked]").count(), 1);
+        assert!(text.contains(&format!("{first} [acked]")));
+        assert_eq!(last_open_count(&paths), 1);
     }
 }

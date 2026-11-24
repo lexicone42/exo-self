@@ -175,7 +175,11 @@ fn compute_usage(input: &Value, total_tokens: u64) -> (u64, u64) {
 
 fn get_git_info(dir: &str) -> (String, String, String) {
     let run = |args: &[&str]| -> String {
+        // The status line redraws constantly in every open session. Without this
+        // flag `git status` can take the index lock to refresh the index, and a
+        // commit or rebase running at that moment fails on it.
         std::process::Command::new("git")
+            .arg("--no-optional-locks")
             .args(args)
             .current_dir(dir)
             .stderr(std::process::Stdio::null())
@@ -290,7 +294,16 @@ fn write_context_window_json(
         let per_session =
             format!("{home}/.claude/exo-self/sessions/context-window-{session_id}.json");
         let _ = std::fs::create_dir_all(format!("{home}/.claude/exo-self/sessions"));
-        let _ = std::fs::write(per_session, &body);
+        write_whole(&per_session, &body);
     }
-    let _ = std::fs::write(path, &body);
+    write_whole(&path, &body);
+}
+
+/// Replace a file in one step. These files are read by hooks while every
+/// session's status line rewrites them, so a reader must never see half of one.
+fn write_whole(path: &str, body: &str) {
+    let tmp = format!("{path}.tmp{}", std::process::id());
+    if std::fs::write(&tmp, body).is_ok() && std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
 }

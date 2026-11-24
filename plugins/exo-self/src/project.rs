@@ -602,13 +602,22 @@ pub fn session_note_paths(
 /// True when a note's file name carries a session's short id in the suggested
 /// position (`2026-11-23--ccff8de5.md`, `2026-09-21--c03fe411-k.md`).
 fn names_another_session(file_name: &str) -> bool {
-    file_name.split_once("--").is_some_and(|(_, rest)| {
-        // Eight hex digits with at least one letter. A run of eight plain
-        // digits is far more often a date (`design--20261123.md`).
+    file_name.split_once("--").is_some_and(|(before, rest)| {
         let id: String = rest.chars().take(8).collect();
-        id.len() == 8
-            && id.chars().all(|c| c.is_ascii_hexdigit())
-            && id.chars().any(|c| c.is_ascii_alphabetic())
+        if id.len() != 8 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+            return false;
+        }
+        // The suggested name is `<date>--<short id>`. After a date, eight hex
+        // digits are a session id even when they are all numerals, which about
+        // one id in forty is. Anywhere else, a run of plain digits is more
+        // likely a date (`design--20261123.md`), so a letter is required.
+        let b = before.as_bytes();
+        let after_a_date = b.len() == 10
+            && b.iter().enumerate().all(|(i, c)| match i {
+                4 | 7 => *c == b'-',
+                _ => c.is_ascii_digit(),
+            });
+        after_a_date || id.chars().any(|c| c.is_ascii_alphabetic())
     })
 }
 
@@ -1526,6 +1535,8 @@ mod tests {
         assert!(names_another_session("2026-11-23--dee2313f.md"));
         assert!(names_another_session("2026-09-21--c03fe411-k.md"));
         assert!(!names_another_session("design--20261123.md"));
+        // An all-numeral short id in the suggested position is still an id.
+        assert!(names_another_session("2026-11-23--12345678.md"));
         assert!(!names_another_session("2026-11-23-design-first.md"));
         assert!(!names_another_session("notes--short.md"));
     }
