@@ -65,6 +65,11 @@ pub struct SessionState {
     // mid-session model changes, which otherwise happen silently and corrupt the
     // self-reported `model:` provenance in session notes.
     pub serving_model: String,
+
+    // The model as hook input names it, on hosts that send it there (Codex).
+    // A fallback for the note template when no status line has reported one. It
+    // is not compared with `serving_model`: the two can name one model two ways.
+    pub host_model: String,
 }
 
 impl Default for SessionState {
@@ -103,6 +108,7 @@ impl Default for SessionState {
             digest_hint_fired: false,
             effort: String::new(),
             serving_model: String::new(),
+            host_model: String::new(),
         }
     }
 }

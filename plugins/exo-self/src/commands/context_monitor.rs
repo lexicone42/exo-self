@@ -327,7 +327,10 @@ fn checkin_survey(usage_pct: u32, source: &str, slug: &str, state: &SessionState
 
 /// The identity fields a new note file needs, with their values (#23).
 fn identity_reminder(state: &SessionState, slug: &str) -> String {
-    let model = (!state.serving_model.is_empty()).then_some(state.serving_model.as_str());
+    let model = [&state.serving_model, &state.host_model]
+        .into_iter()
+        .find(|m| !m.is_empty())
+        .map(String::as_str);
     let lines = project::identity_lines(&state.session_id, slug, model);
     if lines.is_empty() {
         String::new()
@@ -523,6 +526,21 @@ mod tests {
         for claim in ["plenty", "context left", "room left", "getting full"] {
             assert!(!msg.contains(claim), "{claim:?} in {msg:?}");
         }
+    }
+
+    #[test]
+    fn a_pause_message_falls_back_to_the_model_from_hook_input() {
+        let mut state = SessionState {
+            session_id: "s1".into(),
+            host_model: "gpt-5.5".into(),
+            ..Default::default()
+        };
+        assert!(time_nudge_msg(60, "p", &state).contains("`model: \"gpt-5.5\"`"));
+        // A status-line report wins when there is one.
+        state.serving_model = "Fable 5.2".into();
+        let msg = time_nudge_msg(60, "p", &state);
+        assert!(msg.contains("`model: \"Fable 5.2\"`"));
+        assert!(!msg.contains("gpt-5.5"));
     }
 
     #[test]
