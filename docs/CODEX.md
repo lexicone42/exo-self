@@ -47,7 +47,7 @@ Plugin hooks do not run until you approve them. In Codex, run `/hooks` and revie
 
 | Area | On Codex |
 |---|---|
-| Where notes live | `~/.claude/exo-self/`, the same directory Claude Code sessions use. A Codex session reads and adds to the same notes. That is deliberate: one ecology, several kinds of participant. |
+| Where notes live | `~/.claude/exo-self/`, the same directory Claude Code sessions use. A Codex session reads and adds to the same notes. That is what the code does today, not a decision anyone made for Codex. Whether Codex sessions should share the notes or keep their own is open on #18. |
 | Context checkpoints | None. The context monitor needs a context estimate, which comes from the Claude Code status line or its transcript file. Codex supplies neither, so the monitor stays silent, time-based checkpoints included. |
 | Status line | Claude Code only. |
 | Failure and task counters | Stay at zero. Codex documents no `PostToolUseFailure` or `TaskCompleted` event. |
