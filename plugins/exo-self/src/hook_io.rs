@@ -9,8 +9,6 @@ pub struct HookInput {
     pub cwd: String,
     pub transcript_path: String,
     pub trigger: String,
-    /// SessionStart only: "startup", "resume", "clear" or "compact".
-    pub source: String,
     pub reason: String,
     pub tool_name: String,
     pub tool_input: Value,
@@ -56,13 +54,12 @@ impl HookInput {
             // value of any other type is left empty and the transcript name
             // below supplies the id.
             session_id: match map.get("session_id") {
-                Some(Value::String(s)) => s.clone(),
+                Some(Value::String(s)) if is_plain_id(s) => s.clone(),
                 _ => String::new(),
             },
             cwd: text("cwd"),
             transcript_path: text("transcript_path"),
             trigger: text("trigger"),
-            source: text("source"),
             reason: text("reason"),
             tool_name: text("tool_name"),
             tool_input: map.get("tool_input").cloned().unwrap_or(Value::Null),
@@ -81,11 +78,18 @@ impl HookInput {
                 .file_stem()
                 .and_then(|s| s.to_str())
             && input.transcript_path.ends_with(".jsonl")
+            && is_plain_id(stem)
         {
             input.session_id = stem.to_string();
         }
         input
     }
+}
+
+/// A session id goes into file names (`state-<id>.json`), so it must not be
+/// able to name a path: no separators and no `..`.
+fn is_plain_id(id: &str) -> bool {
+    !id.trim_matches('.').is_empty() && !id.contains(['/', '\\']) && !id.contains("..")
 }
 
 /// Hook output with additionalContext injection
@@ -190,7 +194,6 @@ mod tests {
         assert_eq!(hi.session_id, "s");
         assert_eq!(hi.cwd, "/w");
         assert_eq!(hi.trigger, "auto");
-        assert_eq!(hi.source, "resume");
         assert_eq!(hi.reason, "exit");
         assert_eq!(hi.tool_input["command"], "ls");
         assert_eq!(hi.error, "boom");
@@ -246,6 +249,23 @@ mod tests {
         assert_eq!(
             HookInput::parse(r#"{"session_id":{"id":"x"}}"#).session_id,
             ""
+        );
+    }
+
+    #[test]
+    fn a_session_id_that_could_name_a_path_is_not_accepted() {
+        for raw in [
+            r#"{"session_id":"../x"}"#,
+            r#"{"session_id":"a/b"}"#,
+            r#"{"session_id":"a\\b"}"#,
+            r#"{"transcript_path":"/p/..jsonl"}"#,
+        ] {
+            assert_eq!(HookInput::parse(raw).session_id, "", "{raw}");
+        }
+        // An ordinary id with dashes and dots in the middle is fine.
+        assert_eq!(
+            HookInput::parse(r#"{"session_id":"ccff8de5-370f.v2"}"#).session_id,
+            "ccff8de5-370f.v2"
         );
     }
 

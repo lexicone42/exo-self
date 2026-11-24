@@ -58,7 +58,12 @@ pub fn load(paths: &ExoPaths) -> String {
     let text = text.trim();
     if text.len() > MAX_BYTES {
         let cut = crate::markdown::safe_truncate(text, MAX_BYTES);
-        let end = text[..cut].rfind('\n').unwrap_or(cut);
+        // Cut at a line end. If the cut already sits on one, keep that line.
+        let end = if text.as_bytes().get(cut) == Some(&b'\n') {
+            cut
+        } else {
+            text[..cut].rfind('\n').unwrap_or(cut)
+        };
         format!(
             "{}\n[truncated: see {}]",
             text[..end].trim_end(),
