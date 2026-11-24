@@ -18,16 +18,10 @@ updates:
     groups:
       # Minor and patch updates together, once a week. A major version arrives
       # as its own pull request so it is looked at on its own: the first grouped
-      # update bundled six patch bumps with redb 2 -> 5 and failed to build.
+      # update bundled six patch bumps with a major one and failed to build.
       cargo:
         patterns: ["*"]
         update-types: ["minor", "patch"]
-    ignore:
-      # redb is the store behind `exo-self reflect`. A major version changes its
-      # API and may change the file format, so it is upgraded on purpose, with
-      # the existing database in mind, not by a weekly bump.
-      - dependency-name: "redb"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

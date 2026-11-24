@@ -22,7 +22,7 @@ Each Claude that joins the ecology isn't continuing a persistent identity. It's 
 
 **Agents/skills:** Introspection agent (cross-session analysis), self-reflection, scout (deep exploration → advisory findings)
 
-**CLI tools:** `reflect` — preference inference with provenance tracking and cross-machine reporting
+**CLI tools:** `reflect` — preference inference with provenance tracking, from this machine's session notes
 
 ## Installation
 

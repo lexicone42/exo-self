@@ -92,14 +92,7 @@ pub enum Command {
         peek: bool,
     },
     /// Reflexive analysis of exo-self session data
-    Reflect {
-        /// Load session data + meta into redb, infer preferences
-        #[arg(long)]
-        ingest: bool,
-        /// Generate report from redb (cross-machine)
-        #[arg(long)]
-        db: bool,
-    },
+    Reflect,
 }
 
 #[derive(Subcommand)]
@@ -124,7 +117,7 @@ impl Command {
         matches!(
             self,
             Command::Patchpath { .. }
-                | Command::Reflect { .. }
+                | Command::Reflect
                 | Command::Backfill
                 | Command::BackfillTraces
                 | Command::Sigil { .. }
@@ -204,8 +197,8 @@ pub fn dispatch(cmd: Command) -> u8 {
             commands::patchpath::run(&symbol, module.as_deref());
             0
         }
-        Command::Reflect { ingest, db } => {
-            commands::reflect::run(ingest, db);
+        Command::Reflect => {
+            commands::reflect::run();
             0
         }
         Command::Flag { action } => match action {

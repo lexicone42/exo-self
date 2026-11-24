@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // ── Preference model types ──────────────────────────────────────────
 
@@ -78,13 +78,11 @@ pub struct Session {
     pub session_id: String,
     pub date: String,
     pub project: String,
-    pub model: String,
     pub engagement: Option<f64>,
     pub engagement_mode: Option<String>,
     pub task_types: Vec<String>,
     pub duration_min: Option<u32>,
     pub spark_count: Option<u32>,
-    pub opinion_count: Option<u32>,
     pub friction_density: Option<f64>,
     pub spark_density: Option<f64>,
     pub task_velocity: Option<f64>,
@@ -92,7 +90,6 @@ pub struct Session {
     pub phases: Vec<SessionPhase>,
     pub has_prose: bool,
     pub prose_length: usize,
-    pub file_path: PathBuf,
 }
 
 /// Subset of meta.json we need for analysis
@@ -109,6 +106,7 @@ pub struct Meta {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MetaSpark {
     pub text: String,
     pub project: String,
@@ -248,13 +246,11 @@ fn parse_session_file(path: &Path) -> Option<Session> {
         session_id,
         date: yaml_str_field(&fm, "date").unwrap_or_default(),
         project: yaml_str_field(&fm, "project").unwrap_or_default(),
-        model: yaml_str_field(&fm, "model").unwrap_or_default(),
         engagement: yaml_f64_field(&fm, "engagement"),
         engagement_mode: yaml_str_field(&fm, "engagement_mode"),
         task_types: yaml_str_list(&fm, "task_types"),
         duration_min: yaml_u32_field(&fm, "duration_min"),
         spark_count: yaml_u32_field(&fm, "spark_count"),
-        opinion_count: yaml_u32_field(&fm, "opinion_count"),
         friction_density: yaml_f64_field(&fm, "friction_density"),
         spark_density: yaml_f64_field(&fm, "spark_density"),
         task_velocity: yaml_f64_field(&fm, "task_velocity"),
@@ -262,7 +258,6 @@ fn parse_session_file(path: &Path) -> Option<Session> {
         phases,
         has_prose: !prose.is_empty(),
         prose_length: prose.len(),
-        file_path: path.to_path_buf(),
     })
 }
 
