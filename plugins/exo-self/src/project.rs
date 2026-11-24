@@ -343,6 +343,60 @@ pub const DIGEST_STALE_AFTER: usize = 5;
 /// Notes a project accumulates before a first digest is suggested.
 pub const DIGEST_FIRST_AFTER: usize = 25;
 
+/// What to say when a project has no notes to show (#27).
+///
+/// Notes reach a session only when its slug matches the directory they were
+/// written under. When the two differ the session used to start with nothing
+/// and no word of why, which reads the same as a project nobody has worked on.
+/// This names the directory that was read, and any other project directory
+/// whose name ends the same way and does hold notes.
+pub fn no_notes_notice(paths: &ExoPaths, slug: &str) -> Option<String> {
+    if slug.is_empty() || count_session_notes(paths, slug) > 0 {
+        return None;
+    }
+    let dir = paths.project_notes_dir(slug);
+    let last = slug.rsplit("--").next().unwrap_or(slug);
+    let mut similar: Vec<String> = std::fs::read_dir(&paths.per_project_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| name != slug && name.rsplit("--").next() == Some(last))
+        .filter(|name| count_session_notes(paths, name) > 0)
+        .collect();
+    similar.sort();
+    similar.truncate(3);
+
+    let mut msg = format!(
+        "No session notes were found for this project. The directory read was `{}`.",
+        dir.display()
+    );
+    if similar.is_empty() {
+        msg.push_str(
+            " If earlier sessions did work here, their notes are under a different project name: \
+             look in the parent directory before concluding there are none.",
+        );
+    } else {
+        let list: Vec<String> = similar
+            .iter()
+            .map(|name| {
+                let n = count_session_notes(paths, name);
+                format!(
+                    "`{}` ({n} {})",
+                    paths.project_notes_dir(name).display(),
+                    if n == 1 { "note" } else { "notes" }
+                )
+            })
+            .collect();
+        msg.push_str(&format!(
+            " A directory with a similar name does hold notes: {}. If that is the same \
+             project, read them there, and tell the user the names differ.",
+            list.join(", ")
+        ));
+    }
+    Some(msg)
+}
+
 pub fn digest_state(paths: &ExoPaths, slug: &str) -> DigestState {
     if slug.is_empty() {
         return DigestState::NotNeeded;
@@ -1012,6 +1066,54 @@ mod tests {
         assert!(missing.contains("/exo digest"));
         let stale = digest_hint(DigestState::Stale { new_notes: 7 }).unwrap();
         assert!(stale.contains("7 session notes behind"));
+    }
+
+    #[test]
+    fn a_project_with_notes_gets_no_notice() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let notes = paths.project_notes_dir("workspace--mintests");
+        std::fs::create_dir_all(&notes).unwrap();
+        std::fs::write(notes.join("2026-10-03--aaaa.md"), "note").unwrap();
+        assert_eq!(no_notes_notice(&paths, "workspace--mintests"), None);
+        assert_eq!(no_notes_notice(&paths, ""), None);
+    }
+
+    #[test]
+    fn an_empty_project_names_the_directory_and_a_similar_one_with_notes() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        // Notes written under one name, session started under another.
+        let held = paths.project_notes_dir("workspace--mintests");
+        std::fs::create_dir_all(&held).unwrap();
+        std::fs::write(held.join("2026-10-03--aaaa.md"), "note").unwrap();
+        std::fs::write(held.join("2026-10-04--bbbb.md"), "note").unwrap();
+        // Same ending, but only a digest: not offered.
+        let digest_only = paths.project_notes_dir("other--mintests");
+        std::fs::create_dir_all(&digest_only).unwrap();
+        std::fs::write(digest_only.join("_digest.md"), "digest").unwrap();
+        // Different ending: not offered.
+        let unrelated = paths.project_notes_dir("workspace--karkinos");
+        std::fs::create_dir_all(&unrelated).unwrap();
+        std::fs::write(unrelated.join("2026-10-03--cccc.md"), "note").unwrap();
+
+        let notice = no_notes_notice(&paths, "gominimal--mintests").unwrap();
+        assert!(notice.contains("gominimal--mintests"), "{notice}");
+        assert!(
+            notice.contains("workspace--mintests` (2 notes)"),
+            "{notice}"
+        );
+        assert!(!notice.contains("other--mintests"), "{notice}");
+        assert!(!notice.contains("karkinos"), "{notice}");
+    }
+
+    #[test]
+    fn an_empty_project_with_no_similar_one_says_where_it_looked() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ExoPaths::at(dir.path().to_path_buf());
+        let notice = no_notes_notice(&paths, "workspace--new-thing").unwrap();
+        assert!(notice.contains("workspace--new-thing"), "{notice}");
+        assert!(notice.contains("different project name"), "{notice}");
     }
 
     #[test]

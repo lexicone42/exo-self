@@ -330,6 +330,8 @@ pub fn run() {
         sections.push(format!(
             "### Project Notes ({project_slug})\n\n{project_notes}"
         ));
+    } else if let Some(notice) = project::no_notes_notice(&paths, &project_slug) {
+        sections.push(format!("### Project Notes ({project_slug})\n\n{notice}"));
     }
 
     // No digest hint here. A suggestion made at session start lands just as the
