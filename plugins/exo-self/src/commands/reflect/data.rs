@@ -205,6 +205,16 @@ pub fn load_all_sessions(exo_dir: &Path) -> Vec<Session> {
     sessions
 }
 
+/// Sparks in a note. Counted from the note's own text when it has any: the
+/// `spark_count` a note declares is whatever its author typed, or what session
+/// end computed for one file out of several, and it drifts from the prose.
+fn spark_count(fm: &HashMap<String, serde_yaml::Value>, prose: &str) -> Option<u32> {
+    if prose.is_empty() {
+        return yaml_u32_field(fm, "spark_count");
+    }
+    Some(crate::markdown::extract_sparks(prose).len() as u32)
+}
+
 fn parse_session_file(path: &Path) -> Option<Session> {
     let content = std::fs::read_to_string(path).ok()?;
 
@@ -250,7 +260,7 @@ fn parse_session_file(path: &Path) -> Option<Session> {
         engagement_mode: yaml_str_field(&fm, "engagement_mode"),
         task_types: yaml_str_list(&fm, "task_types"),
         duration_min: yaml_u32_field(&fm, "duration_min"),
-        spark_count: yaml_u32_field(&fm, "spark_count"),
+        spark_count: spark_count(&fm, prose),
         friction_density: yaml_f64_field(&fm, "friction_density"),
         spark_density: yaml_f64_field(&fm, "spark_density"),
         task_velocity: yaml_f64_field(&fm, "task_velocity"),
@@ -291,4 +301,35 @@ fn yaml_str_list(fm: &HashMap<String, serde_yaml::Value>, key: &str) -> Vec<Stri
                 .collect()
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(dir: &Path, body: &str) -> std::path::PathBuf {
+        let path = dir.join("2026-11-23--abcd1234.md");
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn sparks_are_counted_from_the_prose_not_the_declared_figure() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = note(
+            dir.path(),
+            "---\nsession_id: \"s1\"\nspark_count: 0\n---\n\n\
+             **Spark** — the first.\n\nProse.\n\n**Spark** — the second.\n",
+        );
+        let session = parse_session_file(&path).unwrap();
+        assert_eq!(session.spark_count, Some(2));
+    }
+
+    #[test]
+    fn a_note_with_no_prose_keeps_its_declared_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = note(dir.path(), "---\nsession_id: \"s1\"\nspark_count: 3\n---\n");
+        let session = parse_session_file(&path).unwrap();
+        assert_eq!(session.spark_count, Some(3));
+    }
 }

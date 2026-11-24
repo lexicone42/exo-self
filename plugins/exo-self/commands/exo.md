@@ -92,7 +92,7 @@ The export format has its own schema version (integer), independent of the plugi
 6. Scan `~/.claude/exo-self/per-project/` for all project directories, and within each, all `.md` session note files:
    - Default: include only summaries (`session_count` = number of files, `last_session_date` = date from newest file name)
    - With `--full`: include the full content of each session file
-7. Read `~/.claude/exo-self/meta.json` for `total_sessions`, `total_checkins`, `total_reflections`, `welfare_summary`, `session_history`
+7. Read `~/.claude/exo-self/meta.json` for `total_sessions`, `total_checkins`, `welfare_summary`, `session_history`
 8. Build the export JSON:
    ```json
    {
@@ -104,7 +104,7 @@ The export format has its own schema version (integer), independent of the plugi
      "sparks": [ ... ],
      "interests": [ "..." ],
      "per_project_summaries": { "<slug>": { "entry_count": N, "last_entry_date": "..." } },
-     "meta_summary": { "total_sessions": N, "total_checkins": N, "total_reflections": N },
+     "meta_summary": { "total_sessions": N, "total_checkins": N },
      "welfare_summary": { ... },
      "session_history": [ ... ]
    }

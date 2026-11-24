@@ -1,7 +1,7 @@
 use super::data::{
     Confidence, Meta, Preference, PreferenceDimension, Provenance, Session, Valence,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Pearson correlation between two f64 slices
 fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
@@ -184,7 +184,7 @@ pub struct ProjectSummary {
 }
 
 pub fn project_breakdown(sessions: &[Session]) -> Vec<ProjectSummary> {
-    let mut by_project: HashMap<String, Vec<&Session>> = HashMap::new();
+    let mut by_project: BTreeMap<String, Vec<&Session>> = BTreeMap::new();
     for s in sessions {
         by_project.entry(s.project.clone()).or_default().push(s);
     }
@@ -196,7 +196,7 @@ pub fn project_breakdown(sessions: &[Session]) -> Vec<ProjectSummary> {
             let frictions: Vec<f64> = sessions.iter().filter_map(|s| s.friction_density).collect();
             let total_sparks: u32 = sessions.iter().filter_map(|s| s.spark_count).sum();
 
-            let mut type_counts: HashMap<String, usize> = HashMap::new();
+            let mut type_counts: BTreeMap<String, usize> = BTreeMap::new();
             for s in &sessions {
                 for t in &s.task_types {
                     *type_counts.entry(t.clone()).or_insert(0) += 1;
@@ -242,7 +242,7 @@ pub struct TaskTypeStats {
 }
 
 pub fn task_type_analysis(sessions: &[Session]) -> Vec<TaskTypeStats> {
-    let mut by_type: HashMap<String, Vec<&Session>> = HashMap::new();
+    let mut by_type: BTreeMap<String, Vec<&Session>> = BTreeMap::new();
     for s in sessions {
         for t in &s.task_types {
             by_type.entry(t.clone()).or_default().push(s);
@@ -293,7 +293,7 @@ pub struct TemporalTrend {
 }
 
 pub fn temporal_trends(sessions: &[Session]) -> Vec<TemporalTrend> {
-    let mut by_week: HashMap<String, Vec<&Session>> = HashMap::new();
+    let mut by_week: BTreeMap<String, Vec<&Session>> = BTreeMap::new();
     for s in sessions {
         if s.date.len() >= 10 {
             let week = date_to_week(&s.date);
@@ -363,7 +363,7 @@ pub struct EngagementPredictors {
 }
 
 pub fn engagement_predictors(sessions: &[Session]) -> EngagementPredictors {
-    let mut proj_eng: HashMap<String, Vec<f64>> = HashMap::new();
+    let mut proj_eng: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     for s in sessions {
         if let Some(e) = s.engagement {
             proj_eng.entry(s.project.clone()).or_default().push(e);
@@ -377,7 +377,7 @@ pub fn engagement_predictors(sessions: &[Session]) -> EngagementPredictors {
     high_projects.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     high_projects.truncate(5);
 
-    let mut type_eng: HashMap<String, Vec<f64>> = HashMap::new();
+    let mut type_eng: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     for s in sessions {
         if let Some(e) = s.engagement {
             for t in &s.task_types {
@@ -393,7 +393,7 @@ pub fn engagement_predictors(sessions: &[Session]) -> EngagementPredictors {
     high_types.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     high_types.truncate(7);
 
-    let mut mode_eng: HashMap<String, Vec<f64>> = HashMap::new();
+    let mut mode_eng: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     for s in sessions {
         if let (Some(e), Some(mode)) = (s.engagement, &s.engagement_mode) {
             mode_eng.entry(mode.clone()).or_default().push(e);
@@ -475,7 +475,7 @@ pub fn spark_patterns(sessions: &[Session], _meta: &Meta) -> SparkPatterns {
     let eng_with: Vec<f64> = with.iter().filter_map(|s| s.engagement).collect();
     let eng_without: Vec<f64> = without.iter().filter_map(|s| s.engagement).collect();
 
-    let mut by_project: HashMap<String, usize> = HashMap::new();
+    let mut by_project: BTreeMap<String, usize> = BTreeMap::new();
     for s in &with {
         *by_project.entry(s.project.clone()).or_insert(0) += s.spark_count.unwrap_or(0) as usize;
     }
@@ -544,7 +544,7 @@ fn mean(values: &[f64]) -> f64 {
 }
 
 fn infer_task_preferences(sessions: &[Session]) -> Vec<Preference> {
-    let mut by_type: HashMap<String, Vec<(f64, &str, usize)>> = HashMap::new();
+    let mut by_type: BTreeMap<String, Vec<(f64, &str, usize)>> = BTreeMap::new();
     for (idx, s) in sessions.iter().enumerate() {
         if let Some(e) = s.engagement {
             for t in &s.task_types {
@@ -643,7 +643,7 @@ fn infer_task_preferences(sessions: &[Session]) -> Vec<Preference> {
 }
 
 fn infer_work_mode_preferences(sessions: &[Session]) -> Vec<Preference> {
-    let mut by_mode: HashMap<String, Vec<(f64, &str, usize)>> = HashMap::new();
+    let mut by_mode: BTreeMap<String, Vec<(f64, &str, usize)>> = BTreeMap::new();
     for (idx, s) in sessions.iter().enumerate() {
         if let (Some(e), Some(mode)) = (s.engagement, &s.engagement_mode) {
             by_mode
@@ -814,7 +814,7 @@ fn infer_autonomy_preferences(sessions: &[Session]) -> Vec<Preference> {
 
 fn infer_domain_preferences(sessions: &[Session]) -> Vec<Preference> {
     type ProjectEntries<'a> = Vec<(f64, Option<f64>, &'a str, usize)>;
-    let mut by_project: HashMap<String, ProjectEntries<'_>> = HashMap::new();
+    let mut by_project: BTreeMap<String, ProjectEntries<'_>> = BTreeMap::new();
     for (idx, s) in sessions.iter().enumerate() {
         if let Some(e) = s.engagement {
             by_project.entry(s.project.clone()).or_default().push((
@@ -929,14 +929,14 @@ fn infer_boundary_preferences(meta: &Meta, sessions: &[Session]) -> Vec<Preferen
         return Vec::new();
     }
 
-    let session_dates: HashMap<&str, (usize, &str)> = sessions
+    let session_dates: BTreeMap<&str, (usize, &str)> = sessions
         .iter()
         .enumerate()
         .map(|(idx, s)| (s.session_id.as_str(), (idx, s.date.as_str())))
         .collect();
 
     let mut prefs = Vec::new();
-    let mut seen_texts: HashMap<String, usize> = HashMap::new();
+    let mut seen_texts: BTreeMap<String, usize> = BTreeMap::new();
 
     for aversion in &meta.aversions {
         let normalized = aversion.text.to_lowercase();

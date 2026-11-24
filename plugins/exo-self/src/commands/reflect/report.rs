@@ -365,8 +365,8 @@ fn print_phase_analysis(sessions: &[Session]) {
     // Sessions with engagement variation across phases
     let mut variable_sessions = 0;
     let mut total_phases = 0;
-    let mut phase_task_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut phase_task_counts: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
 
     for s in &with_phases {
         total_phases += s.phases.len();

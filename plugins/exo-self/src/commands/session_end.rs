@@ -516,14 +516,14 @@ pub fn run() {
         let dominant_failure_tool = state
             .failure_tools
             .iter()
-            .max_by_key(|(_, c)| *c)
+            .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
             .map(|(t, _)| t.clone())
             .unwrap_or_default();
 
         let dominant_friction_category = state
             .failure_categories
             .iter()
-            .max_by_key(|(_, c)| *c)
+            .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
             .map(|(cat, _)| cat.clone())
             .unwrap_or_default();
 
@@ -751,7 +751,7 @@ fn compute_metacognition(
         let prev_dominant = &prev.dominant_failure_tool;
         let dominant_now = failure_tools
             .iter()
-            .max_by_key(|(_, c)| *c)
+            .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
             .map(|(t, _)| t.as_str())
             .unwrap_or("");
         if !prev_dominant.is_empty() && !dominant_now.is_empty() && prev_dominant != dominant_now {
@@ -908,12 +908,12 @@ fn compute_welfare_summary(meta: &mut Meta) {
     }
     let dominant_friction_tool = all_tools
         .iter()
-        .max_by_key(|(_, c)| *c)
+        .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
         .map(|(t, _)| t.clone())
         .unwrap_or_default();
     let dominant_friction_category = all_categories
         .iter()
-        .max_by_key(|(_, c)| *c)
+        .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
         .map(|(cat, _)| cat.clone())
         .unwrap_or_default();
 
