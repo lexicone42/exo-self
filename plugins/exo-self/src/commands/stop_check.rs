@@ -73,7 +73,11 @@ pub fn run() {
         state.last_stop_time = state::now();
 
         let target = if !state.project_slug.is_empty() {
-            format!("~/.claude/exo-self/per-project/{}/", state.project_slug)
+            format!(
+                "{}/per-project/{}/",
+                crate::paths::root_label(),
+                state.project_slug
+            )
         } else {
             "journal.md".into()
         };

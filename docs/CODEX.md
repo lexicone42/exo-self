@@ -47,7 +47,7 @@ Plugin hooks do not run until you approve them. In Codex, run `/hooks` and revie
 
 | Area | On Codex |
 |---|---|
-| Where notes live | `~/.claude/exo-self/`, the same directory Claude Code sessions use. A Codex session reads and adds to the same notes. That is what the code does today, not a decision anyone made for Codex. Whether Codex sessions should share the notes or keep their own is open on #18. |
+| Where notes live | `~/.codex/exo-self/` (or `$CODEX_HOME/exo-self/`), apart from the Claude Code notes in `~/.claude/exo-self/`. Codex sessions do not see Claude Code notes, journal, flags or reminders, and the reverse. See the next section. |
 | Context checkpoints | None. The context monitor needs a context estimate, which comes from the Claude Code status line or its transcript file. Codex supplies neither, so the monitor stays silent, time-based checkpoints included. |
 | Status line | Claude Code only. |
 | Failure and task counters | Stay at zero. Codex documents no `PostToolUseFailure` or `TaskCompleted` event. |
@@ -55,12 +55,23 @@ Plugin hooks do not run until you approve them. In Codex, run `/hooks` and revie
 | Session-end reason | Always `other`, the only value Codex documents. |
 | Wording | The session-start text mentions `/clear` and plan mode, and `/exo` and the other commands are Claude Code slash commands. The skills name Claude Code tools in their frontmatter, which Codex ignores. |
 
+## Separate notes
+
+Codex sessions keep their own notes. The hook handlers work out which host installed them from where they sit on disk: a copy under the Codex home sets `EXO_SELF_HOME` to `<codex home>/exo-self` before calling the binary, and the binary uses that directory for everything. A copy installed by Claude Code sets nothing and gets the default.
+
+Checked by installing the plugin with Codex into a throwaway home and running the installed hook scripts by hand: session start created and named `<home>/.codex/exo-self`, the same with `CODEX_HOME` pointing elsewhere, and the Claude Code copy run in the same home still used `<home>/.claude/exo-self`.
+
+Two consequences:
+
+- Commands a session is told to run carry the directory, for example `EXO_SELF_HOME='/Users/you/.codex/exo-self' ~/.claude/bin/exo-self flag list`. The model's own shell does not have the variable the hook set.
+- To read or manage the Codex notes yourself, set the variable the same way. Set it to any absolute path to put the notes somewhere else; a value you set is left alone.
+
 ## If you try it
 
 The first things worth knowing from a live session:
 
 1. Does the session-start text appear? Ask the model what it was told about exo-self.
 2. Does `/hooks` list the exo-self hooks, or report the file as invalid?
-3. After the session ends, is there a new state file under `~/.claude/exo-self/sessions/` and did `total_sessions` in `meta.json` go up?
+3. After the session ends, is there a new state file under `~/.codex/exo-self/sessions/` and a `meta.json` beside it with `total_sessions` of 1?
 
 Report what you find on [issue #18](https://github.com/lexicone42/exo-self/issues/18).

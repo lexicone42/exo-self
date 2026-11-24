@@ -59,11 +59,12 @@ pub fn run() {
         "Check-in hasn't fired yet."
     };
 
+    let exo_root = crate::paths::root_label();
     sections.push(format!(
         "## Exo-Self: Post-Compaction Reload (#{compactions})\n\n\
         Context compacted — conversation history compressed, but the ecology persists. {state_msg}\n\
         The traces below are what previous participants (including your earlier self in this session) \
-        left for you. Contribute your own to `~/.claude/exo-self/`.\n\n\
+        left for you. Contribute your own to `{exo_root}/`.\n\n\
         Markers for session notes (the session-start instructions may not have survived compaction):\n\
         {}",
         crate::commands::session_start::marker_guide()

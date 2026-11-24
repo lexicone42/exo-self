@@ -126,8 +126,7 @@ pub fn run() {
         sections.push(other_plugin_context);
     }
 
-    let home = std::env::var("HOME").unwrap_or_else(|_| "~".into());
-    let exo_root = format!("{home}/.claude/exo-self");
+    let exo_root = paths.root.to_string_lossy().into_owned();
 
     let marker_guide = marker_guide();
     // The status line's report first. A host with no status line (Codex) names

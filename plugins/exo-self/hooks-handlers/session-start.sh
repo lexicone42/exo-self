@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Session-start hook: auto-builds if binary is missing/stale (fixes #5).
+source "$(dirname "${BASH_SOURCE[0]}")/_home.sh"
+
 SETUP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/setup.sh"
 BIN="$HOME/.claude/bin/exo-self"
 

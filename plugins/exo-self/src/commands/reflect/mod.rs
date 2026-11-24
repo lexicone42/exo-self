@@ -48,8 +48,5 @@ fn run_analysis(sessions: &[data::Session], meta: &data::Meta) {
 }
 
 fn exo_dir() -> std::path::PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/user".into());
-    std::path::PathBuf::from(home)
-        .join(".claude")
-        .join("exo-self")
+    crate::paths::root()
 }

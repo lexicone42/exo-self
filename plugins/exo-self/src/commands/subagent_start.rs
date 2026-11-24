@@ -31,7 +31,7 @@ fn run_plan_as_scout(paths: &ExoPaths, input: &HookInput) {
             .to_string_lossy()
             .into_owned()
     } else {
-        "~/.claude/exo-self/scout.md".into()
+        format!("{}/scout.md", crate::paths::root_label())
     };
 
     let mut sections: Vec<String> = Vec::new();
