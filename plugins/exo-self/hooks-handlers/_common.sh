@@ -8,6 +8,8 @@
 #   source "$(dirname "$0")/_common.sh"
 #   exec "$BIN" "$SUBCMD"
 
+source "$(dirname "${BASH_SOURCE[0]}")/_home.sh"
+
 # Platform-aware binary selection: macOS and Linux (minimal sandbox) may
 # share ~/.claude via bind mount but need different binaries.
 _PLAT="$(uname -s)-$(uname -m)"

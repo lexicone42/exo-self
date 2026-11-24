@@ -296,7 +296,10 @@ fn nudge_msg(state: &SessionState, paths: &ExoPaths) -> String {
 
 fn checkin_survey(usage_pct: u32, source: &str, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
-        format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
+        format!(
+            "your session notes (`{}/per-project/{slug}/`)",
+            crate::paths::root_label()
+        )
     } else {
         "`journal.md`".into()
     };
@@ -344,7 +347,10 @@ fn identity_reminder(state: &SessionState, slug: &str) -> String {
 // verdict the number beside it could contradict (#20).
 fn time_nudge_msg(elapsed_min: u32, slug: &str, state: &SessionState) -> String {
     let target = if !slug.is_empty() {
-        format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
+        format!(
+            "your session notes (`{}/per-project/{slug}/`)",
+            crate::paths::root_label()
+        )
     } else {
         "`journal.md`".into()
     };
@@ -373,7 +379,10 @@ fn time_nudge_msg(elapsed_min: u32, slug: &str, state: &SessionState) -> String 
 // about stopping.
 fn reserve_reminder(usage_pct: u32, source: &str, slug: &str) -> String {
     let target = if !slug.is_empty() {
-        format!("your session notes (`~/.claude/exo-self/per-project/{slug}/`)")
+        format!(
+            "your session notes (`{}/per-project/{slug}/`)",
+            crate::paths::root_label()
+        )
     } else {
         "`journal.md`".into()
     };

@@ -166,8 +166,9 @@ pub fn section(observations: &[Observation]) -> String {
     }
     if observations.len() > MAX_SHOWN {
         lines.push(format!(
-            "- and {} more in this session's file under `~/.claude/exo-self/observations/`",
-            observations.len() - MAX_SHOWN
+            "- and {} more in this session's file under `{}/observations/`",
+            observations.len() - MAX_SHOWN,
+            crate::paths::root_label()
         ));
     }
     lines.join("\n")
@@ -182,8 +183,9 @@ pub fn instruction(session_id: &str) -> String {
     }
     format!(
         "If your answer has a fixed structure with no place for that, record it instead with \
-        `~/.claude/bin/exo-self observe --session {session_id} \"one or two sentences\"`. \
-        The session that started you is shown it with its next prompt."
+        `{} observe --session {session_id} \"one or two sentences\"`. \
+        The session that started you is shown it with its next prompt.",
+        crate::paths::cli()
     )
 }
 
