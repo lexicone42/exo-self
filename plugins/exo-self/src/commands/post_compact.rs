@@ -108,6 +108,10 @@ pub fn run() {
         sections.push(format!(
             "### Your Notes on This Project ({project_slug})\n\n{project_notes}"
         ));
+    } else if let Some(notice) = project::no_notes_notice(&paths, &project_slug) {
+        sections.push(format!(
+            "### Your Notes on This Project ({project_slug})\n\n{notice}"
+        ));
     }
 
     let context = sections.join("\n\n");
